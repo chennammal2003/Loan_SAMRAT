@@ -72,17 +72,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
     if (error) throw error;
+    if (data.user) {
+      await fetchProfile(data.user.id);
+    }
   };
 
   const signUp = async (username: string, email: string, password: string, role: 'merchant' | 'admin') => {
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          username,
+          role,
+        },
+      },
     });
 
     if (authError) throw authError;
@@ -97,7 +106,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role,
       });
 
-    if (profileError) throw profileError;
+    if (profileError) {
+      console.error('Profile creation error:', profileError);
+      throw new Error(`Failed to create user profile: ${profileError.message}`);
+    }
   };
 
   const signOut = async () => {

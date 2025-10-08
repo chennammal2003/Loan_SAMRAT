@@ -30,7 +30,9 @@ export default function SignIn() {
     setLoading(true);
     try {
       await signIn(email, password);
-      navigate('/dashboard');
+      setTimeout(() => {
+        navigate('/dashboard', { replace: true });
+      }, 500);
     } catch (err: any) {
       setError(err.message || 'Failed to sign in');
       setLoading(false);
