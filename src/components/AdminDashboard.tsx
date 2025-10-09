@@ -55,7 +55,7 @@ export default function AdminDashboard() {
           </button>
 
           <button
-            onClick={() => setActiveTab('manage')}
+            onClick={() => { setManageInitialFilter('All'); setActiveTab('manage'); }}
             className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
               activeTab === 'manage'
                 ? 'bg-orange-600 text-white'

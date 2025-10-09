@@ -46,9 +46,9 @@ export default function DashboardStats({ onSelectStatus }: DashboardStatsProps) 
   const rejectedLoans = loans.filter(l => l.status === 'Rejected').length;
 
   const pieData = [
-    { name: 'Accepted', value: acceptedLoans, color: '#10b981' },
-    { name: 'Pending', value: pendingLoans, color: '#f59e0b' },
-    { name: 'Rejected', value: rejectedLoans, color: '#ef4444' },
+    { name: 'Accepted', value: acceptedLoans, color: '#34d399' }, // green-400 (lighter)
+    { name: 'Pending', value: pendingLoans, color: '#fbbf24' },   // yellow-400 (lighter)
+    { name: 'Rejected', value: rejectedLoans, color: '#f87171' }, // red-400 (lighter)
   ];
 
   const monthlyData = React.useMemo(() => {
@@ -167,7 +167,7 @@ export default function DashboardStats({ onSelectStatus }: DashboardStatsProps) 
               <YAxis />
               <Tooltip />
               <Legend />
-              <Bar dataKey="loans" fill="#3b82f6" name="Loan Applications" />
+              <Bar dataKey="loans" fill="#60a5fa" name="Loan Applications" />
             </BarChart>
           </ResponsiveContainer>
         </div>

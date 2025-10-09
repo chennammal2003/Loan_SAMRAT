@@ -70,7 +70,7 @@ export default function MerchantDashboard() {
           </button>
 
           <button
-            onClick={() => setActiveTab('loans')}
+            onClick={() => { setLoanInitialFilter('All'); setActiveTab('loans'); }}
             className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
               activeTab === 'loans'
                 ? 'bg-blue-600 text-white'

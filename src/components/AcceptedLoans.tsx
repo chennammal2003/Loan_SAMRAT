@@ -8,6 +8,8 @@ export default function AcceptedLoans() {
   const [loading, setLoading] = useState(true);
   const [selectedLoan, setSelectedLoan] = useState<LoanApplication | null>(null);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 7;
   const downloadCSV = () => {
     const rows = filtered;
     const headers = [
@@ -96,6 +98,17 @@ export default function AcceptedLoans() {
     });
   }, [loans, search]);
 
+  // Reset pagination on search change
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const start = (page - 1) * pageSize;
+  const end = start + pageSize;
+  const pageItems = filtered.slice(start, end);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -145,7 +158,7 @@ export default function AcceptedLoans() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {filtered.map((loan) => (
+              {pageItems.map((loan) => (
                 <tr key={loan.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
                     {loan.first_name} {loan.last_name}
@@ -182,6 +195,30 @@ export default function AcceptedLoans() {
           </table>
         </div>
       </div>
+
+      {/* Pagination */}
+      {filtered.length > 0 && (
+        <div className="mt-4 flex items-center justify-between">
+          <p className="text-xs text-gray-500 dark:text-gray-400">Showing {Math.min(total, start + 1)}–{Math.min(total, end)} of {total}</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-3 py-1 rounded border bg-white dark:bg-gray-800 dark:border-gray-700 text-sm disabled:opacity-50"
+            >
+              Prev
+            </button>
+            <span className="text-sm text-gray-600 dark:text-gray-300">Page {page} of {totalPages}</span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="px-3 py-1 rounded border bg-white dark:bg-gray-800 dark:border-gray-700 text-sm disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
 
       {selectedLoan && (
         <LoanDetailsModal
