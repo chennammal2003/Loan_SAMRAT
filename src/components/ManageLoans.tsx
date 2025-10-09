@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Eye, FileText } from 'lucide-react';
 import { supabase, LoanApplication } from '../lib/supabase';
 import LoanDetailsModal from './LoanDetailsModal';
+import DocsModal from './DocsModal';
 import ConfirmActionModal from './ConfirmActionModal';
 
 export default function ManageLoans() {
@@ -11,6 +12,7 @@ export default function ManageLoans() {
   const [confirmAction, setConfirmAction] = useState<{ loan: LoanApplication; action: 'accept' | 'reject' } | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Pending' | 'Accepted' | 'Rejected'>('All');
+  const [showDocsFor, setShowDocsFor] = useState<LoanApplication | null>(null);
   
   const downloadCSV = () => {
     const rows = filteredLoans;
@@ -219,6 +221,7 @@ export default function ManageLoans() {
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Tenure</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Phone</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Status</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Documents</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Actions</th>
               </tr>
             </thead>
@@ -244,6 +247,20 @@ export default function ManageLoans() {
                     <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(loan.status)}`}>
                       {loan.status}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    {loan.status !== 'Accepted' ? (
+                      <span className="inline-flex px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs">N/A</span>
+                    ) : (loan as any)?.documents_uploaded ? (
+                      <button
+                        onClick={() => setShowDocsFor(loan)}
+                        className="inline-flex items-center space-x-2 px-3 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 text-xs"
+                      >
+                        <span>View Docs</span>
+                      </button>
+                    ) : (
+                      <span className="inline-flex px-2 py-1 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400 text-xs">Pending</span>
+                    )}
                   </td>
                   <td className="px-6 py-4">
                     <button
@@ -273,6 +290,14 @@ export default function ManageLoans() {
           showActions={selectedLoan.status === 'Pending'}
           onAccept={() => handleAccept(selectedLoan)}
           onReject={() => handleReject(selectedLoan)}
+        />
+      )}
+
+      {showDocsFor && (
+        <DocsModal
+          loanId={showDocsFor.id}
+          fullName={`${showDocsFor.first_name} ${showDocsFor.last_name}`}
+          onClose={() => setShowDocsFor(null)}
         />
       )}
 

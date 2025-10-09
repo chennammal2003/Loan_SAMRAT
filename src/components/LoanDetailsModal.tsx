@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X, Download, FileText } from 'lucide-react';
 import { LoanApplication, LoanDocument, supabase } from '../lib/supabase';
 
@@ -34,14 +34,112 @@ export default function LoanDetailsModal({ loan, onClose, showActions, onAccept,
     }
   };
 
+  // ---------------- Document Upload Section ----------------
+  const requiredTypes = ['Appraisal Slip','Utility Bill','Income Proof','Address Proof'] as const;
+  type ReqType = typeof requiredTypes[number];
+  const [docFiles, setDocFiles] = useState<Record<ReqType, File | null>>({
+    'Appraisal Slip': null,
+    'Utility Bill': null,
+    'Income Proof': null,
+    'Address Proof': null,
+  });
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState<string | null>(null);
+
+  const docsComplete = useMemo(() => {
+    const have = new Set(documents.map(d => d.document_type));
+    return requiredTypes.every(t => have.has(t));
+  }, [documents]);
+
+  const loanDocsAlreadyUploaded = (loan as any).documents_uploaded === true || docsComplete;
+  const canShowUpload = loan.status === 'Accepted';
+
+  const onPick = (type: ReqType, file: File | null) => {
+    if (!file) {
+      setDocFiles(prev => ({ ...prev, [type]: null }));
+      return;
+    }
+    if (file.type !== 'application/pdf') {
+      alert('Only PDF files are allowed');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Max file size is 5MB');
+      return;
+    }
+    setDocFiles(prev => ({ ...prev, [type]: file }));
+  };
+
+  const allSelected = requiredTypes.every(t => !!docFiles[t]);
+
+  const handleDocsUpload = async () => {
+    if (!canShowUpload || loanDocsAlreadyUploaded) return;
+    if (!allSelected) {
+      alert('Please select all 4 required documents.');
+      return;
+    }
+    setUploading(true);
+    setUploadMsg(null);
+    try {
+      const folder = `${loan.first_name}_${loan.last_name}/loan_${loan.id}`;
+      const toUpload: Array<{ type: ReqType; file: File; path: string }>= [];
+      for (const type of requiredTypes) {
+        const f = docFiles[type]!;
+        const safeType = type.replace(/\s+/g,'_');
+        const path = `${folder}/${safeType}_${f.name}`; // retain original file name after type prefix
+        const { error } = await supabase.storage
+          .from('loan_documents')
+          .upload(path, f, { upsert: true, contentType: 'application/pdf', cacheControl: '3600' });
+        if (error) throw error;
+        toUpload.push({ type, file: f, path });
+      }
+
+      // Insert mappings into loan_documents table
+      if (toUpload.length > 0) {
+        const payload = toUpload.map(u => ({
+          loan_id: loan.id,
+          document_type: u.type,
+          file_name: u.file.name,
+          file_path: u.path,
+          file_size: u.file.size,
+        }));
+        const { error: insErr } = await supabase.from('loan_documents').insert(payload);
+        if (insErr) throw insErr;
+      }
+
+      // Mark loan as docs uploaded
+      await supabase.from('loans').update({
+        documents_uploaded: true,
+        documents_uploaded_at: new Date().toISOString(),
+      }).eq('id', loan.id);
+
+      setUploadMsg('All documents uploaded successfully.');
+      // refresh list
+      await fetchDocuments();
+    } catch (e) {
+      console.error('Upload failed', e);
+      alert('Failed to upload documents');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const downloadDocument = async (doc: LoanDocument) => {
     try {
-      // Always fetch Blob to enforce filename and automatic Downloads save
-      const { data, error } = await supabase.storage
-        .from('documents')
-        .download(doc.file_path);
-
-      if (error || !data) throw error || new Error('No data');
+      // Try loan_documents bucket first, then fallback to documents
+      let data: Blob | null = null;
+      let error: any = null;
+      {
+        const res = await supabase.storage.from('loan_documents').download(doc.file_path);
+        data = res.data as any;
+        error = res.error as any;
+      }
+      if (error || !data) {
+        const res2 = await supabase.storage.from('documents').download(doc.file_path);
+        data = res2.data as any;
+        error = res2.error as any;
+        if (error || !data) throw error || new Error('No data');
+      }
 
       // Sanitize filename to avoid filesystem issues
       const sanitize = (s: string) => s.replace(/[^\w\-\.\s]/g, '_').replace(/\s+/g, ' ').trim();
@@ -237,6 +335,42 @@ export default function LoanDetailsModal({ loan, onClose, showActions, onAccept,
                   ))}
                 </div>
               )}
+
+              {/* Upload section */}
+              <div className="mt-6 p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+                <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Add Documents</h4>
+                {!canShowUpload && (
+                  <p className="text-sm text-gray-600 dark:text-gray-300">N/A — Loan must be accepted by admin to add documents.</p>
+                )}
+                {canShowUpload && loanDocsAlreadyUploaded && (
+                  <p className="text-sm text-green-600">Documents already added for this loan.</p>
+                )}
+                {canShowUpload && !loanDocsAlreadyUploaded && (
+                  <div className="space-y-3">
+                    {requiredTypes.map((t) => (
+                      <div key={t} className="flex items-center justify-between gap-3">
+                        <label className="text-sm text-gray-700 dark:text-gray-300 w-40">{t}</label>
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          onChange={(e) => onPick(t, e.target.files?.[0] || null)}
+                          className="flex-1 text-sm"
+                        />
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-end gap-3 pt-2">
+                      <button
+                        onClick={handleDocsUpload}
+                        disabled={!allSelected || uploading}
+                        className="px-4 py-2 rounded bg-blue-600 text-white disabled:opacity-50"
+                      >
+                        {uploading ? 'Uploading...' : 'Submit Documents'}
+                      </button>
+                    </div>
+                    {uploadMsg && <p className="text-sm text-green-600">{uploadMsg}</p>}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
