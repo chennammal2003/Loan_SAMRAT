@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Eye, FileText } from 'lucide-react';
 import { supabase, LoanApplication } from '../lib/supabase';
 import LoanDetailsModal from './LoanDetailsModal';
@@ -7,6 +7,53 @@ export default function AcceptedLoans() {
   const [loans, setLoans] = useState<LoanApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLoan, setSelectedLoan] = useState<LoanApplication | null>(null);
+  const [search, setSearch] = useState('');
+  const downloadCSV = () => {
+    const rows = filtered;
+    const headers = [
+      'Full Name','Application Number','Interest Scheme','Loan Amount','Tenure','Gold Lock','Status','Phone Number','Aadhaar Number','PAN Number','Address','Down Payment','Father/Mother/Spouse Name','Reference1','Reference2'
+    ];
+    const escape = (v: any) => {
+      const s = v === null || v === undefined ? '' : String(v);
+      const needsQuotes = /[",\n]/.test(s);
+      const t = s.replace(/\"/g,'\"\"');
+      return needsQuotes ? `\"${t}\"` : t;
+    };
+    const textify = (v: any) => (v === null || v === undefined || v === '' ? '' : `="${String(v)}"`);
+    const lines = [headers.join(',')];
+    rows.forEach(l => {
+      const ref1 = [l.reference1_name, l.reference1_contact, l.reference1_relationship].filter(Boolean).join(' | ');
+      const ref2 = [l.reference2_name, l.reference2_contact, l.reference2_relationship].filter(Boolean).join(' | ');
+      const line = [
+        escape(`${l.first_name} ${l.last_name}`),
+        textify(l.id),
+        escape(l.interest_scheme),
+        textify(l.loan_amount),
+        textify(l.tenure),
+        escape(l.gold_price_lock_date),
+        escape(l.status),
+        textify(l.mobile_primary),
+        textify(l.aadhaar_number),
+        textify(l.pan_number),
+        escape(l.address),
+        escape(l.down_payment_details || ''),
+        escape(l.father_mother_spouse_name),
+        escape(ref1),
+        escape(ref2)
+      ].join(',');
+      lines.push(line);
+    });
+    const blob = new Blob(["\uFEFF" + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const now = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+    a.download = `Accepted_Loans_${now}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   useEffect(() => {
     fetchLoans();
@@ -29,6 +76,26 @@ export default function AcceptedLoans() {
     }
   };
 
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return loans;
+    return loans.filter((l) => {
+      const hay = [
+        l.first_name,
+        l.last_name,
+        `${l.first_name} ${l.last_name}`,
+        l.mobile_primary,
+        l.email_id,
+        l.address,
+        l.id,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [loans, search]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -49,6 +116,21 @@ export default function AcceptedLoans() {
 
   return (
     <div>
+      {/* Search */}
+      <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div />
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search name, phone, email, address, ID"
+            className="w-full md:w-80 px-3 py-2 rounded border bg-white dark:bg-gray-800 dark:border-gray-700 text-sm"
+          />
+          <button onClick={downloadCSV} className="px-3 py-2 rounded bg-emerald-600 text-white text-sm hover:bg-emerald-700">Download Excel</button>
+        </div>
+      </div>
+
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -63,7 +145,7 @@ export default function AcceptedLoans() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {loans.map((loan) => (
+              {filtered.map((loan) => (
                 <tr key={loan.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
                     {loan.first_name} {loan.last_name}
@@ -91,6 +173,11 @@ export default function AcceptedLoans() {
                   </td>
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-6 text-center text-sm text-gray-500 dark:text-gray-400">No results</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

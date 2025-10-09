@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Eye, FileText } from 'lucide-react';
 import { supabase, LoanApplication } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,6 +9,8 @@ export default function LoanDetails() {
   const [loans, setLoans] = useState<LoanApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLoan, setSelectedLoan] = useState<LoanApplication | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Pending' | 'Accepted' | 'Rejected'>('All');
 
   useEffect(() => {
     if (profile) {
@@ -34,6 +36,28 @@ export default function LoanDetails() {
       setLoading(false);
     }
   };
+
+  const filteredLoans = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return loans
+      .filter((l) => (statusFilter === 'All' ? true : l.status === statusFilter))
+      .filter((l) => {
+        if (!q) return true;
+        const hay = [
+          l.first_name,
+          l.last_name,
+          `${l.first_name} ${l.last_name}`,
+          l.mobile_primary,
+          l.email_id,
+          l.address,
+          l.id,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return hay.includes(q);
+      });
+  }, [loans, search, statusFilter]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -66,6 +90,29 @@ export default function LoanDetails() {
 
   return (
     <div>
+      {/* Filters */}
+      <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600 dark:text-gray-300">Status:</label>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="px-3 py-2 rounded border bg-white dark:bg-gray-800 dark:border-gray-700 text-sm"
+          >
+            <option>All</option>
+            <option>Pending</option>
+            <option>Accepted</option>
+            <option>Rejected</option>
+          </select>
+        </div>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search name, phone, email, address, ID"
+          className="w-full md:w-80 px-3 py-2 rounded border bg-white dark:bg-gray-800 dark:border-gray-700 text-sm"
+        />
+      </div>
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -80,7 +127,7 @@ export default function LoanDetails() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {loans.map((loan) => (
+              {filteredLoans.map((loan) => (
                 <tr key={loan.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
                     {loan.first_name} {loan.last_name}
@@ -110,6 +157,11 @@ export default function LoanDetails() {
                   </td>
                 </tr>
               ))}
+              {filteredLoans.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-6 text-center text-sm text-gray-500 dark:text-gray-400">No results</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

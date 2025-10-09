@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Users, X, Eye } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -32,6 +32,43 @@ export default function MerchantDetails() {
   const [rows, setRows] = useState<MerchantRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<MerchantRow | null>(null);
+  const [search, setSearch] = useState('');
+
+  const downloadCSV = () => {
+    const headers = [
+      'Merchant ID','Username','Created At',
+      'Owner Name','Business Name','Email','Phone','Address','Age',
+      'Business Type','Business Category','GST Number','PAN Number',
+      'Bank Name','Account Number','IFSC Code','UPI ID'
+    ];
+    const escape = (v: any) => {
+      const s = v === null || v === undefined ? '' : String(v);
+      const needsQuotes = /[",\n]/.test(s);
+      const t = s.replace(/"/g,'""');
+      return needsQuotes ? `"${t}"` : t;
+    };
+    const lines = [headers.join(',')];
+    filtered.forEach((r) => {
+      const p = r.profile || {} as any;
+      const line = [
+        r.id, r.username, r.created_at,
+        p.owner_name || r.username, p.business_name || '', p.email || r.email, p.phone || '', p.address || '', p.age ?? '',
+        p.business_type || '', p.business_category || '', p.gst_number || '', p.pan_number || '',
+        p.bank_name || '', p.account_number || '', p.ifsc_code || '', p.upi_id || ''
+      ].map(escape).join(',');
+      lines.push(line);
+    });
+    const blob = new Blob(["\uFEFF" + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const now = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+    a.download = `Merchants_${now}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   useEffect(() => {
     fetchMerchants();
@@ -114,6 +151,26 @@ export default function MerchantDetails() {
     }
   };
 
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => {
+      const hay = [
+        r.profile?.owner_name,
+        r.profile?.business_name,
+        r.profile?.phone,
+        r.profile?.email || r.email,
+        r.profile?.address,
+        r.username,
+        r.id,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [rows, search]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -134,6 +191,20 @@ export default function MerchantDetails() {
 
   return (
     <div className="space-y-6">
+      {/* Search */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div />
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search owner, business, phone, email, address, ID"
+            className="w-full md:w-96 px-3 py-2 rounded border bg-white dark:bg-gray-800 dark:border-gray-700 text-sm"
+          />
+          <button onClick={downloadCSV} className="px-3 py-2 rounded bg-emerald-600 text-white text-sm hover:bg-emerald-700">Download Excel</button>
+        </div>
+      </div>
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -147,7 +218,7 @@ export default function MerchantDetails() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {rows.map((r) => (
+              {filtered.map((r) => (
                 <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/40">
                   <td className="px-6 py-3 text-sm text-gray-900 dark:text-white">{r.profile?.owner_name || r.username}</td>
                   <td className="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">{r.profile?.business_name || '-'}</td>
@@ -164,6 +235,11 @@ export default function MerchantDetails() {
                   </td>
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-6 py-6 text-center text-sm text-gray-500 dark:text-gray-400">No results</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
