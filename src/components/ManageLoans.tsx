@@ -5,13 +5,17 @@ import LoanDetailsModal from './LoanDetailsModal';
 import DocsModal from './DocsModal';
 import ConfirmActionModal from './ConfirmActionModal';
 
-export default function ManageLoans() {
+interface ManageLoansProps {
+  initialStatusFilter?: 'All' | 'Pending' | 'Accepted' | 'Rejected';
+}
+
+export default function ManageLoans({ initialStatusFilter = 'All' }: ManageLoansProps) {
   const [loans, setLoans] = useState<LoanApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLoan, setSelectedLoan] = useState<LoanApplication | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ loan: LoanApplication; action: 'accept' | 'reject' } | null>(null);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Pending' | 'Accepted' | 'Rejected'>('All');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Pending' | 'Accepted' | 'Rejected'>(initialStatusFilter);
   const [showDocsFor, setShowDocsFor] = useState<LoanApplication | null>(null);
   
   const downloadCSV = () => {

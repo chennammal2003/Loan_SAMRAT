@@ -4,7 +4,11 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import { supabase, LoanApplication } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
-export default function DashboardStats() {
+interface DashboardStatsProps {
+  onSelectStatus?: (status: 'All' | 'Accepted' | 'Pending' | 'Rejected') => void;
+}
+
+export default function DashboardStats({ onSelectStatus }: DashboardStatsProps) {
   const { profile } = useAuth();
   const [loans, setLoans] = useState<LoanApplication[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,7 +81,10 @@ export default function DashboardStats() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg">
+        <button
+          onClick={() => onSelectStatus?.('All')}
+          className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg text-left hover:ring-2 ring-blue-200"
+        >
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
               <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
@@ -85,9 +92,12 @@ export default function DashboardStats() {
           </div>
           <p className="text-gray-600 dark:text-gray-400 text-sm">Total Loans</p>
           <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">{totalLoans}</p>
-        </div>
+        </button>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg">
+        <button
+          onClick={() => onSelectStatus?.('Accepted')}
+          className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg text-left hover:ring-2 ring-green-200"
+        >
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
               <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
@@ -95,9 +105,12 @@ export default function DashboardStats() {
           </div>
           <p className="text-gray-600 dark:text-gray-400 text-sm">Accepted</p>
           <p className="text-3xl font-bold text-green-600 dark:text-green-400 mt-2">{acceptedLoans}</p>
-        </div>
+        </button>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg">
+        <button
+          onClick={() => onSelectStatus?.('Pending')}
+          className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg text-left hover:ring-2 ring-yellow-200"
+        >
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg flex items-center justify-center">
               <Clock className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
@@ -105,9 +118,12 @@ export default function DashboardStats() {
           </div>
           <p className="text-gray-600 dark:text-gray-400 text-sm">Pending</p>
           <p className="text-3xl font-bold text-yellow-600 dark:text-yellow-400 mt-2">{pendingLoans}</p>
-        </div>
+        </button>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg">
+        <button
+          onClick={() => onSelectStatus?.('Rejected')}
+          className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg text-left hover:ring-2 ring-red-200"
+        >
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
               <XCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
@@ -115,7 +131,7 @@ export default function DashboardStats() {
           </div>
           <p className="text-gray-600 dark:text-gray-400 text-sm">Rejected</p>
           <p className="text-3xl font-bold text-red-600 dark:text-red-400 mt-2">{rejectedLoans}</p>
-        </div>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

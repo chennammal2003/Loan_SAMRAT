@@ -4,13 +4,17 @@ import { supabase, LoanApplication } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import LoanDetailsModal from './LoanDetailsModal';
 
-export default function LoanDetails() {
+interface LoanDetailsProps {
+  initialStatusFilter?: 'All' | 'Pending' | 'Accepted' | 'Rejected';
+}
+
+export default function LoanDetails({ initialStatusFilter = 'All' }: LoanDetailsProps) {
   const { profile } = useAuth();
   const [loans, setLoans] = useState<LoanApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLoan, setSelectedLoan] = useState<LoanApplication | null>(null);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Pending' | 'Accepted' | 'Rejected'>('All');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Pending' | 'Accepted' | 'Rejected'>(initialStatusFilter);
 
   useEffect(() => {
     if (profile) {

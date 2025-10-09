@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Shield, LogOut, Moon, Sun, List, CheckCircle, Users } from 'lucide-react';
@@ -15,6 +15,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
+  const [manageInitialFilter, setManageInitialFilter] = useState<'All' | 'Pending' | 'Accepted' | 'Rejected'>('All');
 
   const handleSignOut = async () => {
     try {
@@ -126,8 +127,15 @@ export default function AdminDashboard() {
         </header>
 
         <div className="p-8">
-          {activeTab === 'home' && <DashboardStats />}
-          {activeTab === 'manage' && <ManageLoans />}
+          {activeTab === 'home' && (
+            <DashboardStats
+              onSelectStatus={(status) => {
+                setManageInitialFilter(status);
+                setActiveTab('manage');
+              }}
+            />
+          )}
+          {activeTab === 'manage' && <ManageLoans initialStatusFilter={manageInitialFilter} />}
           {activeTab === 'accepted' && <AcceptedLoans />}
           {activeTab === 'merchants' && <MerchantDetails />}
         </div>

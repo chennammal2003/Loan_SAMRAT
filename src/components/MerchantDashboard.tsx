@@ -18,6 +18,7 @@ export default function MerchantDashboard() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [showProfilePanel, setShowProfilePanel] = useState(false);
+  const [loanInitialFilter, setLoanInitialFilter] = useState<'All' | 'Pending' | 'Accepted' | 'Rejected'>('All');
 
   const handleSignOut = async () => {
     try {
@@ -141,8 +142,15 @@ export default function MerchantDashboard() {
         </header>
 
         <div className="p-8">
-          {activeTab === 'home' && <DashboardStats />}
-          {activeTab === 'loans' && <LoanDetails />}
+          {activeTab === 'home' && (
+            <DashboardStats
+              onSelectStatus={(status) => {
+                setLoanInitialFilter(status);
+                setActiveTab('loans');
+              }}
+            />
+          )}
+          {activeTab === 'loans' && <LoanDetails initialStatusFilter={loanInitialFilter} />}
           {activeTab === 'products' && (
             <div className="space-y-6">
               <ProductDescription />
