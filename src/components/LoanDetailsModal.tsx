@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X, Download, FileText } from 'lucide-react';
 import { LoanApplication, LoanDocument, supabase } from '../lib/supabase';
 
@@ -36,16 +36,24 @@ export default function LoanDetailsModal({ loan, onClose, showActions, onAccept,
 
   const downloadDocument = async (doc: LoanDocument) => {
     try {
+      // Always fetch Blob to enforce filename and automatic Downloads save
       const { data, error } = await supabase.storage
-        .from('loan_documents')
+        .from('documents')
         .download(doc.file_path);
 
-      if (error) throw error;
+      if (error || !data) throw error || new Error('No data');
+
+      // Sanitize filename to avoid filesystem issues
+      const sanitize = (s: string) => s.replace(/[^\w\-\.\s]/g, '_').replace(/\s+/g, ' ').trim();
+      const fullName = sanitize(`${loan.first_name} ${loan.last_name}`);
+      const original = sanitize(doc.file_name);
+      const fileName = `${fullName} - ${original}`;
 
       const url = URL.createObjectURL(data);
       const a = document.createElement('a');
       a.href = url;
-      a.download = doc.file_name;
+      a.download = fileName;
+      a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

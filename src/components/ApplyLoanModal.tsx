@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -21,6 +21,7 @@ export interface LoanFormData {
   loanAmount: string;
   tenure: string;
   processingFee: number;
+  gstAccepted: boolean;
 
   firstName: string;
   lastName: string;
@@ -68,6 +69,7 @@ const initialFormData: LoanFormData = {
   loanAmount: '',
   tenure: '',
   processingFee: 0,
+  gstAccepted: false,
 
   firstName: '',
   lastName: '',
@@ -113,6 +115,8 @@ export default function ApplyLoanModal({ onClose }: ApplyLoanModalProps) {
   const [formData, setFormData] = useState<LoanFormData>(initialFormData);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const totalSteps = 6;
 
@@ -126,6 +130,64 @@ export default function ApplyLoanModal({ onClose }: ApplyLoanModalProps) {
   ];
 
   const CurrentStepComponent = steps[currentStep - 1].component;
+
+  const requiredFiles: Array<keyof LoanFormData> = useMemo(
+    () => ['aadhaarCopy', 'panCopy', 'utilityBill', 'bankStatement', 'photo', 'proformaInvoice'],
+    []
+  );
+
+  const computeErrors = (): Record<string, string> => {
+    const newErrors: Record<string, string> = {};
+
+    // Step 1: Loan Details
+    if (!formData.interestScheme) newErrors.interestScheme = 'Required';
+    if (!formData.goldPriceLockDate) newErrors.goldPriceLockDate = 'Required';
+    if (!formData.proformaInvoice) newErrors.proformaInvoice = 'Required';
+    if (!formData.loanAmount) newErrors.loanAmount = 'Required';
+    if (!formData.tenure) newErrors.tenure = 'Required';
+    if (!formData.gstAccepted) newErrors.gstAccepted = 'Please accept GST charges';
+
+    // Step 2: Personal Details
+    if (!formData.firstName) newErrors.firstName = 'Required';
+    if (!formData.lastName) newErrors.lastName = 'Required';
+    if (!formData.fatherMotherSpouseName) newErrors.fatherMotherSpouseName = 'Required';
+    if (!formData.dateOfBirth) newErrors.dateOfBirth = 'Required';
+    if (!formData.aadhaarNumber || !/^\d{12}$/.test(formData.aadhaarNumber)) newErrors.aadhaarNumber = 'Enter valid 12-digit Aadhaar';
+    if (!formData.panNumber || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.panNumber)) newErrors.panNumber = 'Enter valid PAN';
+    if (!formData.gender) newErrors.gender = 'Required';
+    if (!formData.maritalStatus) newErrors.maritalStatus = 'Required';
+    if (!formData.occupation) newErrors.occupation = 'Required';
+    if (formData.occupation === 'Others' && !formData.occupationOther) newErrors.occupationOther = 'Please specify';
+    if (!formData.emailId || !/.+@.+\..+/.test(formData.emailId)) newErrors.emailId = 'Enter valid email';
+
+    // Step 3: Contact & Address
+    if (!formData.address) newErrors.address = 'Required';
+    if (!formData.pinCode || !/^\d{6}$/.test(formData.pinCode)) newErrors.pinCode = 'Enter valid 6-digit PIN';
+    if (!formData.mobilePrimary || !/^[6-9]\d{9}$/.test(formData.mobilePrimary)) newErrors.mobilePrimary = 'Enter valid mobile number';
+
+    // Step 4: References
+    if (!formData.reference1Name) newErrors.reference1Name = 'Required';
+    if (!formData.reference1Address) newErrors.reference1Address = 'Required';
+    if (!formData.reference1Contact || !/^[6-9]\d{9}$/.test(formData.reference1Contact)) newErrors.reference1Contact = 'Enter valid contact';
+    if (!formData.reference1Relationship) newErrors.reference1Relationship = 'Required';
+    if (!formData.reference2Name) newErrors.reference2Name = 'Required';
+    if (!formData.reference2Address) newErrors.reference2Address = 'Required';
+    if (!formData.reference2Contact || !/^[6-9]\d{9}$/.test(formData.reference2Contact)) newErrors.reference2Contact = 'Enter valid contact';
+    if (!formData.reference2Relationship) newErrors.reference2Relationship = 'Required';
+
+    // Step 5: Documents
+    requiredFiles.forEach((field) => {
+      if (!formData[field]) newErrors[field as string] = 'Required';
+    });
+
+    // Step 6: Declaration
+    if (!formData.declarationAccepted) newErrors.declarationAccepted = 'Please accept declaration';
+
+    return newErrors;
+  };
+
+  const currentErrors = useMemo(() => computeErrors(), [formData]);
+  const isFormValid = Object.keys(currentErrors).length === 0;
 
   const handleNext = () => {
     if (currentStep < totalSteps) {
@@ -141,16 +203,21 @@ export default function ApplyLoanModal({ onClose }: ApplyLoanModalProps) {
     }
   };
 
-  const uploadFile = async (file: File, folderName: string, fileName: string): Promise<string> => {
+  const uploadFile = async (file: File, folderName: string, fileName: string): Promise<{ path: string; publicUrl: string }> => {
     const filePath = `${folderName}/${fileName}`;
 
+    // Note: @supabase/supabase-js upload does not expose progress callbacks; we mark 100% when done
+    setUploadProgress((p) => ({ ...p, [fileName]: 10 }));
     const { error: uploadError } = await supabase.storage
-      .from('loan_documents')
-      .upload(filePath, file, { upsert: true });
+      .from('documents')
+      .upload(filePath, file, { upsert: true, contentType: file.type || undefined, cacheControl: '3600' });
 
     if (uploadError) throw uploadError;
 
-    return filePath;
+    const { data } = supabase.storage.from('documents').getPublicUrl(filePath);
+    const publicUrl = data.publicUrl;
+    setUploadProgress((p) => ({ ...p, [fileName]: 100 }));
+    return { path: filePath, publicUrl };
   };
 
   const handleSubmit = async () => {
@@ -158,50 +225,15 @@ export default function ApplyLoanModal({ onClose }: ApplyLoanModalProps) {
 
     setLoading(true);
     try {
-      const folderName = `${formData.firstName}_${formData.lastName}`;
-
-      const { data: loanData, error: loanError } = await supabase
-        .from('loans')
-        .insert({
-          user_id: profile.id,
-          first_name: formData.firstName,
-          last_name: formData.lastName,
-          father_mother_spouse_name: formData.fatherMotherSpouseName,
-          date_of_birth: formData.dateOfBirth,
-          aadhaar_number: formData.aadhaarNumber,
-          pan_number: formData.panNumber,
-          gender: formData.gender,
-          marital_status: formData.maritalStatus,
-          occupation: formData.occupation === 'Others' ? formData.occupationOther : formData.occupation,
-          introduced_by: formData.introducedBy,
-          email_id: formData.emailId,
-          address: formData.address,
-          pin_code: formData.pinCode,
-          landmark: formData.landmark,
-          permanent_address: formData.permanentAddress || formData.address,
-          mobile_primary: formData.mobilePrimary,
-          mobile_alternative: formData.mobileAlternative,
-          reference1_name: formData.reference1Name,
-          reference1_address: formData.reference1Address,
-          reference1_contact: formData.reference1Contact,
-          reference1_relationship: formData.reference1Relationship,
-          reference2_name: formData.reference2Name,
-          reference2_address: formData.reference2Address,
-          reference2_contact: formData.reference2Contact,
-          reference2_relationship: formData.reference2Relationship,
-          interest_scheme: formData.interestScheme,
-          gold_price_lock_date: formData.goldPriceLockDate,
-          down_payment_details: formData.downPaymentDetails,
-          loan_amount: parseFloat(formData.loanAmount),
-          tenure: parseInt(formData.tenure),
-          processing_fee: formData.processingFee,
-          status: 'Pending',
-          declaration_accepted: formData.declarationAccepted,
-        })
-        .select()
-        .single();
-
-      if (loanError) throw loanError;
+      const newErrors = computeErrors();
+      setErrors(newErrors);
+      if (Object.keys(newErrors).length > 0) {
+        setLoading(false);
+        setToast({ type: 'error', message: 'Please complete all required fields.' });
+        return;
+      }
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const folderName = `${profile.id}/${formData.firstName}_${formData.lastName}/${timestamp}`;
 
       const documents = [
         { file: formData.aadhaarCopy, type: 'Aadhaar Copy' },
@@ -211,27 +243,98 @@ export default function ApplyLoanModal({ onClose }: ApplyLoanModalProps) {
         { file: formData.photo, type: 'Passport Photo' },
         { file: formData.proformaInvoice, type: 'Proforma Invoice' },
       ];
-
-      for (const doc of documents) {
-        if (doc.file) {
-          const filePath = await uploadFile(doc.file, folderName, `${loanData.id}_${doc.type}_${doc.file.name}`);
-
-          await supabase.from('loan_documents').insert({
-            loan_id: loanData.id,
-            document_type: doc.type,
-            file_name: doc.file.name,
-            file_path: filePath,
-            file_size: doc.file.size,
-          });
+      const uploadedFiles: Array<{ type: string; file: File; path: string; publicUrl: string }> = [];
+      try {
+        // 1) Upload all files first
+        for (const doc of documents) {
+          if (doc.file) {
+            const safeType = doc.type.replace(/\s+/g, '_');
+            const uniqueName = `${safeType}_${doc.file.name}`;
+            const { path, publicUrl } = await uploadFile(doc.file, folderName, uniqueName);
+            uploadedFiles.push({ type: doc.type, file: doc.file, path, publicUrl });
+          }
         }
-      }
 
-      alert('Loan application submitted successfully!');
-      onClose();
-      window.location.reload();
+        // Ensure at least the required ones exist
+        const missingRequired = documents.filter(d => d.file && !uploadedFiles.find(u => u.file === d.file));
+        if (missingRequired.length > 0) {
+          throw new Error('Some documents failed to upload.');
+        }
+
+        // 2) Insert loan after successful uploads
+        const { data: loanData, error: loanError } = await supabase
+          .from('loans')
+          .insert({
+            user_id: profile.id,
+            first_name: formData.firstName,
+            last_name: formData.lastName,
+            father_mother_spouse_name: formData.fatherMotherSpouseName,
+            date_of_birth: formData.dateOfBirth,
+            aadhaar_number: formData.aadhaarNumber,
+            pan_number: formData.panNumber,
+            gender: formData.gender,
+            marital_status: formData.maritalStatus,
+            occupation: formData.occupation === 'Others' ? formData.occupationOther : formData.occupation,
+            introduced_by: formData.introducedBy,
+            email_id: formData.emailId,
+            address: formData.address,
+            pin_code: formData.pinCode,
+            landmark: formData.landmark,
+            permanent_address: formData.permanentAddress || formData.address,
+            mobile_primary: formData.mobilePrimary,
+            mobile_alternative: formData.mobileAlternative,
+            reference1_name: formData.reference1Name,
+            reference1_address: formData.reference1Address,
+            reference1_contact: formData.reference1Contact,
+            reference1_relationship: formData.reference1Relationship,
+            reference2_name: formData.reference2Name,
+            reference2_address: formData.reference2Address,
+            reference2_contact: formData.reference2Contact,
+            reference2_relationship: formData.reference2Relationship,
+            interest_scheme: formData.interestScheme,
+            gold_price_lock_date: formData.goldPriceLockDate,
+            down_payment_details: formData.downPaymentDetails,
+            loan_amount: parseFloat(formData.loanAmount),
+            tenure: parseInt(formData.tenure),
+            processing_fee: formData.processingFee,
+            status: 'Pending',
+            declaration_accepted: formData.declarationAccepted,
+          })
+          .select()
+          .single();
+
+        if (loanError || !loanData) throw loanError || new Error('Failed to create loan');
+
+        // 3) Insert loan_documents mapping
+        if (uploadedFiles.length > 0) {
+          const docsPayload = uploadedFiles.map((u) => ({
+            loan_id: loanData.id,
+            document_type: u.type,
+            file_name: u.file.name,
+            file_path: u.path,
+            file_size: u.file.size,
+          }));
+          const { error: docsError } = await supabase.from('loan_documents').insert(docsPayload);
+          if (docsError) throw docsError;
+        }
+
+        setToast({ type: 'success', message: 'Loan Application Submitted Successfully' });
+        onClose();
+        window.location.reload();
+      } catch (innerErr) {
+        // Cleanup: delete uploaded files if any part fails before success
+        if (uploadedFiles.length > 0) {
+          try {
+            await supabase.storage.from('documents').remove(uploadedFiles.map((u) => u.path));
+          } catch (cleanupErr) {
+            console.error('Cleanup failed (files):', cleanupErr);
+          }
+        }
+        throw innerErr;
+      }
     } catch (error: any) {
       console.error('Error submitting loan:', error);
-      alert(error.message || 'Failed to submit loan application');
+      setToast({ type: 'error', message: error.message || 'Failed to submit loan application' });
     } finally {
       setLoading(false);
     }
@@ -275,6 +378,22 @@ export default function ApplyLoanModal({ onClose }: ApplyLoanModalProps) {
             errors={errors}
             setErrors={setErrors}
           />
+
+          {currentStep === 5 && (
+            <div className="mt-6 space-y-2">
+              {Object.entries(uploadProgress).map(([name, prog]) => (
+                <div key={name} className="w-full">
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>{name}</span>
+                    <span>{prog}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded">
+                    <div className="h-2 bg-blue-600 rounded" style={{ width: `${prog}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between p-6 border-t border-gray-200 dark:border-gray-700">
@@ -302,7 +421,7 @@ export default function ApplyLoanModal({ onClose }: ApplyLoanModalProps) {
           ) : (
             <button
               onClick={handleSubmit}
-              disabled={loading || !formData.declarationAccepted}
+              disabled={loading || !isFormValid}
               className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Submitting...' : 'Submit Application'}
@@ -310,6 +429,18 @@ export default function ApplyLoanModal({ onClose }: ApplyLoanModalProps) {
           )}
         </div>
       </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-[60] px-4 py-3 rounded shadow-lg ${
+          toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+        }`}>
+          <div className="flex items-center space-x-3">
+            <span className="font-medium">{toast.type === 'success' ? 'Success' : 'Error'}</span>
+            <span className="opacity-90">{toast.message}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

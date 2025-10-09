@@ -41,8 +41,8 @@ export default function LoanDetailsStep({ formData, setFormData, errors, setErro
           className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
         >
           <option value="">Select Interest Scheme</option>
-          <option value="12gm">12 gm</option>
-          <option value="6bm">6 bm</option>
+          <option value="12 gm">12 gm</option>
+          <option value="6 gm">6 gm</option>
         </select>
         {errors.interestScheme && <p className="text-red-500 text-sm mt-1">{errors.interestScheme}</p>}
       </div>
@@ -78,11 +78,11 @@ export default function LoanDetailsStep({ formData, setFormData, errors, setErro
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Down Payment Details
         </label>
-        <input
-          type="text"
+        <textarea
           value={formData.downPaymentDetails}
           onChange={(e) => setFormData((prev) => ({ ...prev, downPaymentDetails: e.target.value }))}
           placeholder="e.g., ₹10,000 paid via UPI"
+          rows={3}
           className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
         />
       </div>
@@ -132,6 +132,21 @@ export default function LoanDetailsStep({ formData, setFormData, errors, setErro
           readOnly
           className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-600 text-gray-900 dark:text-white"
         />
+      </div>
+
+      <div>
+        <label className="flex items-start space-x-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={formData.gstAccepted as unknown as boolean}
+            onChange={(e) => setFormData((prev) => ({ ...prev, gstAccepted: e.target.checked }))}
+            className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+          />
+          <span className="text-sm text-gray-700 dark:text-gray-300">
+            I accept GST charges on the processing fee. <span className="text-red-500">*</span>
+          </span>
+        </label>
+        {errors.gstAccepted && <p className="text-red-500 text-sm mt-1">{errors.gstAccepted}</p>}
       </div>
     </div>
   );

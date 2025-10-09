@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { FileText, LogOut, Moon, Sun, Plus, List, Package } from 'lucide-react';
+import { FileText, LogOut, Moon, Sun, Plus, List, Package, User } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import ApplyLoanModal from './ApplyLoanModal';
 import LoanDetails from './LoanDetails';
 import ProductDescription from './ProductDescription';
+import MerchantProfilePanel from './MerchantProfilePanel';
 import DashboardStats from './DashboardStats';
 
 type ActiveTab = 'home' | 'apply' | 'loans' | 'products';
@@ -16,6 +17,7 @@ export default function MerchantDashboard() {
   const { theme, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [showApplyModal, setShowApplyModal] = useState(false);
+  const [showProfilePanel, setShowProfilePanel] = useState(false);
 
   const handleSignOut = async () => {
     try {
@@ -89,6 +91,19 @@ export default function MerchantDashboard() {
             <Package className="w-5 h-5" />
             <span>Product Description</span>
           </button>
+
+          {/* New: Profile item opens slide-over panel */}
+          <button
+            onClick={() => setShowProfilePanel(true)}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+              showProfilePanel
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            <User className="w-5 h-5" />
+            <span>My Profile</span>
+          </button>
         </nav>
 
         <div className="absolute bottom-0 w-64 p-4 border-t border-gray-200 dark:border-gray-700">
@@ -128,13 +143,33 @@ export default function MerchantDashboard() {
         <div className="p-8">
           {activeTab === 'home' && <DashboardStats />}
           {activeTab === 'loans' && <LoanDetails />}
-          {activeTab === 'products' && <ProductDescription />}
+          {activeTab === 'products' && (
+            <div className="space-y-6">
+              <ProductDescription />
+              {/* Profile panel trigger below product description */}
+              <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Profile</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Manage your merchant profile details</p>
+                </div>
+                <button
+                  onClick={() => setShowProfilePanel(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Open Profile
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </main>
 
       {showApplyModal && (
         <ApplyLoanModal onClose={() => setShowApplyModal(false)} />
       )}
+
+      {/* Slide-over Profile Panel opens on the opposite side (right) */}
+      <MerchantProfilePanel open={showProfilePanel} onClose={() => setShowProfilePanel(false)} />
     </div>
   );
 }

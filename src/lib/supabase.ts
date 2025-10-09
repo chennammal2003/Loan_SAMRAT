@@ -66,6 +66,16 @@ export interface LoanDocument {
   document_type: string;
   file_name: string;
   file_path: string;
+  file_url?: string;
   file_size?: number;
   uploaded_at: string;
 }
+ export interface DocumentStatus {
+   id: string;
+   loan_id: string;
+   document_type: string;
+   status: 'Pending' | 'Verified' | 'Rejected';
+   remarks?: string;
+   updated_at: string;
+ }
+ 
