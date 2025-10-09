@@ -172,8 +172,10 @@ export default function AcceptedLoans() {
                   <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
                     {loan.mobile_primary}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
-                    {new Date(loan.updated_at).toLocaleDateString()}
+                  <td className="px-6 py-4">
+                    <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                      Accepted
+                    </span>
                   </td>
                   <td className="px-6 py-4">
                     <button

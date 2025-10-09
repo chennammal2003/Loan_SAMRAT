@@ -88,10 +88,6 @@ export default function ManageLoans({ initialStatusFilter = 'All' }: ManageLoans
     }
   };
 
-  const handleAccept = (loan: LoanApplication) => {
-    setConfirmAction({ loan, action: 'accept' });
-  };
-
   const handleReject = (loan: LoanApplication) => {
     setConfirmAction({ loan, action: 'reject' });
   };
@@ -329,6 +325,7 @@ export default function ManageLoans({ initialStatusFilter = 'All' }: ManageLoans
           loan={selectedLoan}
           onClose={() => setSelectedLoan(null)}
           showActions={selectedLoan.status === 'Pending'}
+          onAccept={() => setConfirmAction({ loan: selectedLoan, action: 'accept' })}
           onReject={() => handleReject(selectedLoan)}
         />
       )}

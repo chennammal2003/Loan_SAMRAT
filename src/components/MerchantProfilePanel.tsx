@@ -50,6 +50,12 @@ export default function MerchantProfilePanel({ open, onClose }: MerchantProfileP
   const [form, setForm] = useState<MerchantProfileForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const genCode = (biz: string, location: string, seed: string) => {
+    const slug = (s: string) => (s || '').replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase().padEnd(3, 'X');
+    let h = 0; for (let i = 0; i < (seed || '').length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+    const r = (h % 900) + 100;
+    return `${slug(biz)}-${slug(location)}-${r}`;
+  };
 
   useEffect(() => {
     if (profile?.id) {
@@ -170,7 +176,12 @@ export default function MerchantProfilePanel({ open, onClose }: MerchantProfileP
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Merchant ID</label>
-              <input value={profile.id} readOnly className="w-full px-3 py-2 rounded border bg-gray-100 dark:bg-gray-700" />
+              <input
+                value={genCode(form?.business_name || '', form?.address || '', profile.id)}
+                readOnly
+                className="w-full px-3 py-2 rounded border bg-gray-100 dark:bg-gray-700"
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">This ID is derived from Business Name and Address (location). Fill those fields to update.</p>
             </div>
             <div className="col-span-2">
               <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Business Name</label>

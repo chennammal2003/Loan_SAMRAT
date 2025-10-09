@@ -8,6 +8,7 @@ import LoanDetails from './LoanDetails';
 import ProductDescription from './ProductDescription';
 import MerchantProfilePanel from './MerchantProfilePanel';
 import DashboardStats from './DashboardStats';
+import MerchantProfileGate from './MerchantProfileGate';
 
 type ActiveTab = 'home' | 'apply' | 'loans' | 'products';
 
@@ -19,6 +20,7 @@ export default function MerchantDashboard() {
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [showProfilePanel, setShowProfilePanel] = useState(false);
   const [loanInitialFilter, setLoanInitialFilter] = useState<'All' | 'Pending' | 'Accepted' | 'Rejected'>('All');
+  const [showProfileSetup, setShowProfileSetup] = useState(true);
 
   const handleSignOut = async () => {
     try {
@@ -178,6 +180,11 @@ export default function MerchantDashboard() {
 
       {/* Slide-over Profile Panel opens on the opposite side (right) */}
       <MerchantProfilePanel open={showProfilePanel} onClose={() => setShowProfilePanel(false)} />
+
+      {/* First-time merchant profile setup gate (auto-skips if already completed) */}
+      {showProfileSetup && (
+        <MerchantProfileGate onDone={() => setShowProfileSetup(false)} />
+      )}
     </div>
   );
 }

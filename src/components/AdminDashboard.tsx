@@ -16,6 +16,7 @@ export default function AdminDashboard() {
   const { theme, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [manageInitialFilter, setManageInitialFilter] = useState<'All' | 'Pending' | 'Accepted' | 'Rejected'>('All');
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   const handleSignOut = async () => {
     try {
@@ -97,6 +98,12 @@ export default function AdminDashboard() {
               <p className="text-sm font-medium text-gray-900 dark:text-white">{profile?.username}</p>
               <p className="text-xs text-gray-500 dark:text-gray-400">{profile?.email}</p>
             </div>
+            <button
+              onClick={() => setShowProfileModal(true)}
+              className="mt-3 w-full px-4 py-2 text-sm rounded-lg bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100"
+            >
+              My Profile
+            </button>
           </div>
           <button
             onClick={handleSignOut}
@@ -140,6 +147,31 @@ export default function AdminDashboard() {
           {activeTab === 'merchants' && <MerchantDetails />}
         </div>
       </main>
+
+      {showProfileModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowProfileModal(false)} />
+          <div className="relative w-full max-w-sm bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">My Profile</h3>
+              
+            </div>
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-gray-500 dark:text-gray-400">Username</p>
+                <p className="font-medium text-gray-900 dark:text-white">{profile?.username || '-'}</p>
+              </div>
+              <div>
+                <p className="text-gray-500 dark:text-gray-400">Email</p>
+                <p className="font-medium text-gray-900 dark:text-white">{profile?.email || '-'}</p>
+              </div>
+            </div>
+            <div className="mt-5 text-right">
+              <button onClick={() => setShowProfileModal(false)} className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

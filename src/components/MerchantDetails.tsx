@@ -33,6 +33,12 @@ export default function MerchantDetails() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<MerchantRow | null>(null);
   const [search, setSearch] = useState('');
+  const genCode = (biz?: string, location?: string, seed?: string) => {
+    const slug = (s?: string) => (s || '').replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase().padEnd(3, 'X');
+    let h = 0; for (let i = 0; i < (seed || '').length; i++) h = (h * 31 + (seed as string).charCodeAt(i)) >>> 0;
+    const r = (h % 900) + 100;
+    return `${slug(biz)}-${slug(location)}-${r}`;
+  };
 
   const downloadCSV = () => {
     const headers = [
@@ -259,7 +265,7 @@ export default function MerchantDetails() {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-gray-500">Merchant ID</p>
-                  <p className="font-medium">{selected.id}</p>
+                  <p className="font-medium">{genCode(selected.profile?.business_name, selected.profile?.address, selected.id)}</p>
                 </div>
                 <div>
                   <p className="text-gray-500">Owner Name</p>
