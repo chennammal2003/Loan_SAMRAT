@@ -343,7 +343,7 @@ export default function LoanDetailsModal({ loan, onClose, showActions, onAccept,
                   <p className="text-sm text-gray-600 dark:text-gray-300">N/A — Loan must be accepted by admin to add documents.</p>
                 )}
                 {canShowUpload && loanDocsAlreadyUploaded && (
-                  <p className="text-sm text-green-600">Documents already added for this loan.</p>
+                  <p className="text-sm text-green-600">Documents  added for this loan.</p>
                 )}
                 {canShowUpload && !loanDocsAlreadyUploaded && (
                   <div className="space-y-3">

@@ -50,6 +50,8 @@ export default function MerchantProfilePanel({ open, onClose }: MerchantProfileP
   const [form, setForm] = useState<MerchantProfileForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  // View/Edit toggle
+  const [isEditing, setIsEditing] = useState(false);
   const genCode = (biz: string, location: string, seed: string) => {
     const slug = (s: string) => (s || '').replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase().padEnd(3, 'X');
     let h = 0; for (let i = 0; i < (seed || '').length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
@@ -87,9 +89,15 @@ export default function MerchantProfilePanel({ open, onClose }: MerchantProfileP
               ifsc_code: data.ifsc_code || '',
               upi_id: data.upi_id || '',
             });
+            setIsEditing(false);
+          } else {
+            // No data, keep view mode until user clicks Edit
+            setIsEditing(false);
           }
         } catch (e) {
           // Silently ignore if table doesn't exist or RLS prevents read
+          // Keep view mode by default
+          setIsEditing(false);
         }
       })();
     }
@@ -139,10 +147,13 @@ export default function MerchantProfilePanel({ open, onClose }: MerchantProfileP
         );
       if (error) throw error;
       setToast({ type: 'success', message: 'Profile saved' });
-      onClose();
+      setTimeout(() => setToast(null), 3000);
+      // Switch back to view mode after save, keep panel open
+      setIsEditing(false);
     } catch (e: any) {
       console.error('Failed to save merchant profile', e);
       setToast({ type: 'error', message: e?.message || 'Failed to save profile. Ask admin to enable merchant_profiles table.' });
+      setTimeout(() => setToast(null), 3000);
     } finally {
       setSaving(false);
     }
@@ -167,9 +178,19 @@ export default function MerchantProfilePanel({ open, onClose }: MerchantProfileP
       >
         <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Merchant Profile</h3>
-          <button onClick={close} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
+          <div className="flex items-center gap-2">
+            {!isEditing && (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="px-3 py-1.5 rounded bg-gray-200 dark:bg-gray-700 text-sm hover:bg-gray-300 dark:hover:bg-gray-600"
+              >
+                Edit
+              </button>
+            )}
+            <button onClick={close} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
         </div>
 
         <div className="p-4 space-y-4 overflow-y-auto h-[calc(100%-64px)]">
@@ -185,65 +206,71 @@ export default function MerchantProfilePanel({ open, onClose }: MerchantProfileP
             </div>
             <div className="col-span-2">
               <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Business Name</label>
-              <input value={form?.business_name || ''} onChange={(e)=>setForm(f=>({...(f as any), business_name:e.target.value}))} className="w-full px-3 py-2 rounded border bg-white dark:bg-gray-700" />
+              <input value={form?.business_name || ''} onChange={(e)=>setForm(f=>({...(f as any), business_name:e.target.value}))} readOnly={!isEditing} className={`w-full px-3 py-2 rounded border ${isEditing ? 'bg-white dark:bg-gray-700' : 'bg-gray-100 dark:bg-gray-700/70 cursor-not-allowed'}`} />
             </div>
             <div>
               <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Owner Name</label>
-              <input value={form?.owner_name || ''} onChange={(e)=>setForm(f=>({...(f as any), owner_name:e.target.value}))} className="w-full px-3 py-2 rounded border bg-white dark:bg-gray-700" />
+              <input value={form?.owner_name || ''} onChange={(e)=>setForm(f=>({...(f as any), owner_name:e.target.value}))} readOnly={!isEditing} className={`w-full px-3 py-2 rounded border ${isEditing ? 'bg-white dark:bg-gray-700' : 'bg-gray-100 dark:bg-gray-700/70 cursor-not-allowed'}`} />
             </div>
             <div>
               <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Email Address</label>
-              <input type="email" value={form?.email || ''} onChange={(e)=>setForm(f=>({...(f as any), email:e.target.value}))} className="w-full px-3 py-2 rounded border bg-white dark:bg-gray-700" />
+              <input type="email" value={form?.email || ''} onChange={(e)=>setForm(f=>({...(f as any), email:e.target.value}))} readOnly={!isEditing} className={`w-full px-3 py-2 rounded border ${isEditing ? 'bg-white dark:bg-gray-700' : 'bg-gray-100 dark:bg-gray-700/70 cursor-not-allowed'}`} />
             </div>
             <div>
               <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Phone Number</label>
-              <input value={form?.phone || ''} onChange={(e)=>setForm(f=>({...(f as any), phone:e.target.value}))} className="w-full px-3 py-2 rounded border bg-white dark:bg-gray-700" />
+              <input value={form?.phone || ''} onChange={(e)=>setForm(f=>({...(f as any), phone:e.target.value}))} readOnly={!isEditing} className={`w-full px-3 py-2 rounded border ${isEditing ? 'bg-white dark:bg-gray-700' : 'bg-gray-100 dark:bg-gray-700/70 cursor-not-allowed'}`} />
             </div>
             <div className="col-span-2">
               <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Address</label>
-              <textarea value={form?.address || ''} onChange={(e)=>setForm(f=>({...(f as any), address:e.target.value}))} rows={2} className="w-full px-3 py-2 rounded border bg-white dark:bg-gray-700" />
+              <textarea value={form?.address || ''} onChange={(e)=>setForm(f=>({...(f as any), address:e.target.value}))} rows={2} readOnly={!isEditing} className={`w-full px-3 py-2 rounded border ${isEditing ? 'bg-white dark:bg-gray-700' : 'bg-gray-100 dark:bg-gray-700/70 cursor-not-allowed'}`} />
             </div>
             <div>
               <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Age</label>
-              <input type="number" value={form?.age || ''} onChange={(e)=>setForm(f=>({...(f as any), age:e.target.value}))} className="w-full px-3 py-2 rounded border bg-white dark:bg-gray-700" />
+              <input type="number" value={form?.age || ''} onChange={(e)=>setForm(f=>({...(f as any), age:e.target.value}))} readOnly={!isEditing} className={`w-full px-3 py-2 rounded border ${isEditing ? 'bg-white dark:bg-gray-700' : 'bg-gray-100 dark:bg-gray-700/70 cursor-not-allowed'}`} />
             </div>
             <div>
               <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Business Type</label>
-              <input value={form?.business_type || ''} onChange={(e)=>setForm(f=>({...(f as any), business_type:e.target.value}))} className="w-full px-3 py-2 rounded border bg-white dark:bg-gray-700" />
+              <input value={form?.business_type || ''} onChange={(e)=>setForm(f=>({...(f as any), business_type:e.target.value}))} readOnly={!isEditing} className={`w-full px-3 py-2 rounded border ${isEditing ? 'bg-white dark:bg-gray-700' : 'bg-gray-100 dark:bg-gray-700/70 cursor-not-allowed'}`} />
             </div>
             <div>
               <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Business Category</label>
-              <input value={form?.business_category || ''} onChange={(e)=>setForm(f=>({...(f as any), business_category:e.target.value}))} className="w-full px-3 py-2 rounded border bg-white dark:bg-gray-700" />
+              <input value={form?.business_category || ''} onChange={(e)=>setForm(f=>({...(f as any), business_category:e.target.value}))} readOnly={!isEditing} className={`w-full px-3 py-2 rounded border ${isEditing ? 'bg-white dark:bg-gray-700' : 'bg-gray-100 dark:bg-gray-700/70 cursor-not-allowed'}`} />
             </div>
             <div>
               <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">GST Number</label>
-              <input value={form?.gst_number || ''} onChange={(e)=>setForm(f=>({...(f as any), gst_number:e.target.value}))} className="w-full px-3 py-2 rounded border bg-white dark:bg-gray-700" />
+              <input value={form?.gst_number || ''} onChange={(e)=>setForm(f=>({...(f as any), gst_number:e.target.value}))} readOnly={!isEditing} className={`w-full px-3 py-2 rounded border ${isEditing ? 'bg-white dark:bg-gray-700' : 'bg-gray-100 dark:bg-gray-700/70 cursor-not-allowed'}`} />
             </div>
             <div>
               <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">PAN Number</label>
-              <input value={form?.pan_number || ''} onChange={(e)=>setForm(f=>({...(f as any), pan_number:e.target.value}))} className="w-full px-3 py-2 rounded border bg-white dark:bg-gray-700" />
+              <input value={form?.pan_number || ''} onChange={(e)=>setForm(f=>({...(f as any), pan_number:e.target.value}))} readOnly={!isEditing} className={`w-full px-3 py-2 rounded border ${isEditing ? 'bg-white dark:bg-gray-700' : 'bg-gray-100 dark:bg-gray-700/70 cursor-not-allowed'}`} />
             </div>
             <div>
               <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Bank Name</label>
-              <input value={form?.bank_name || ''} onChange={(e)=>setForm(f=>({...(f as any), bank_name:e.target.value}))} className="w-full px-3 py-2 rounded border bg-white dark:bg-gray-700" />
+              <input value={form?.bank_name || ''} onChange={(e)=>setForm(f=>({...(f as any), bank_name:e.target.value}))} readOnly={!isEditing} className={`w-full px-3 py-2 rounded border ${isEditing ? 'bg-white dark:bg-gray-700' : 'bg-gray-100 dark:bg-gray-700/70 cursor-not-allowed'}`} />
             </div>
             <div>
               <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Account Number</label>
-              <input value={form?.account_number || ''} onChange={(e)=>setForm(f=>({...(f as any), account_number:e.target.value}))} className="w-full px-3 py-2 rounded border bg-white dark:bg-gray-700" />
+              <input value={form?.account_number || ''} onChange={(e)=>setForm(f=>({...(f as any), account_number:e.target.value}))} readOnly={!isEditing} className={`w-full px-3 py-2 rounded border ${isEditing ? 'bg-white dark:bg-gray-700' : 'bg-gray-100 dark:bg-gray-700/70 cursor-not-allowed'}`} />
             </div>
             <div>
               <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">IFSC Code</label>
-              <input value={form?.ifsc_code || ''} onChange={(e)=>setForm(f=>({...(f as any), ifsc_code:e.target.value}))} className="w-full px-3 py-2 rounded border bg-white dark:bg-gray-700" />
+              <input value={form?.ifsc_code || ''} onChange={(e)=>setForm(f=>({...(f as any), ifsc_code:e.target.value}))} readOnly={!isEditing} className={`w-full px-3 py-2 rounded border ${isEditing ? 'bg-white dark:bg-gray-700' : 'bg-gray-100 dark:bg-gray-700/70 cursor-not-allowed'}`} />
             </div>
             <div>
               <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">UPI ID (optional)</label>
-              <input value={form?.upi_id || ''} onChange={(e)=>setForm(f=>({...(f as any), upi_id:e.target.value}))} className="w-full px-3 py-2 rounded border bg-white dark:bg-gray-700" />
+              <input value={form?.upi_id || ''} onChange={(e)=>setForm(f=>({...(f as any), upi_id:e.target.value}))} readOnly={!isEditing} className={`w-full px-3 py-2 rounded border ${isEditing ? 'bg-white dark:bg-gray-700' : 'bg-gray-100 dark:bg-gray-700/70 cursor-not-allowed'}`} />
             </div>
           </div>
 
           <div className="flex justify-end space-x-3 pt-2">
-            <button onClick={close} className="px-4 py-2 rounded bg-gray-200 dark:bg-gray-700">Cancel</button>
-            <button onClick={handleSave} disabled={saving} className="px-4 py-2 rounded bg-blue-600 text-white disabled:opacity-50">{saving ? 'Saving...' : 'Save Profile'}</button>
+            {isEditing ? (
+              <>
+                <button onClick={() => setIsEditing(false)} className="px-4 py-2 rounded bg-gray-200 dark:bg-gray-700">Cancel</button>
+                <button onClick={handleSave} disabled={saving} className="px-4 py-2 rounded bg-blue-600 text-white disabled:opacity-50">{saving ? 'Saving...' : 'Save Profile'}</button>
+              </>
+            ) : (
+              <button onClick={close} className="px-4 py-2 rounded bg-gray-200 dark:bg-gray-700">Close</button>
+            )}
           </div>
         </div>
       </div>

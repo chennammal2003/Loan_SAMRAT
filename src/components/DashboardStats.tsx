@@ -50,6 +50,8 @@ export default function DashboardStats({ onSelectStatus }: DashboardStatsProps) 
     { name: 'Pending', value: pendingLoans, color: '#fbbf24' },   // yellow-400 (lighter)
     { name: 'Rejected', value: rejectedLoans, color: '#f87171' }, // red-400 (lighter)
   ];
+  // Avoid label overlap by not rendering zero-value slices
+  const pieDataFiltered = pieData.filter(d => d.value > 0);
 
   const monthlyData = React.useMemo(() => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -140,7 +142,7 @@ export default function DashboardStats({ onSelectStatus }: DashboardStatsProps) 
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
-                data={pieData}
+                data={pieDataFiltered}
                 cx="50%"
                 cy="50%"
                 labelLine={false}
@@ -149,7 +151,7 @@ export default function DashboardStats({ onSelectStatus }: DashboardStatsProps) 
                 fill="#8884d8"
                 dataKey="value"
               >
-                {pieData.map((entry, index) => (
+                {pieDataFiltered.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>

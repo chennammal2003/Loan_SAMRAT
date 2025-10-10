@@ -19,6 +19,7 @@ export default function ManageLoans({ initialStatusFilter = 'All' }: ManageLoans
   const [showDocsFor, setShowDocsFor] = useState<LoanApplication | null>(null);
   const [page, setPage] = useState(1);
   const pageSize = 7;
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   
   const downloadCSV = () => {
     const rows = filteredLoans;
@@ -105,10 +106,12 @@ export default function ManageLoans({ initialStatusFilter = 'All' }: ManageLoans
       await fetchLoans();
       setSelectedLoan(null);
       setConfirmAction(null);
-      alert('Loan accepted successfully!');
+      setToast({ type: 'success', message: 'Loan accepted successfully!' });
+      setTimeout(() => setToast(null), 3000);
     } catch (error: any) {
       console.error('Error accepting loan:', error);
-      alert(error.message || 'Failed to accept loan');
+      setToast({ type: 'error', message: error.message || 'Failed to accept loan' });
+      setTimeout(() => setToast(null), 3000);
     }
   };
 
@@ -125,10 +128,12 @@ export default function ManageLoans({ initialStatusFilter = 'All' }: ManageLoans
       await fetchLoans();
       setSelectedLoan(null);
       setConfirmAction(null);
-      alert('Loan rejected successfully!');
+      setToast({ type: 'success', message: 'Loan rejected successfully!' });
+      setTimeout(() => setToast(null), 3000);
     } catch (error: any) {
       console.error('Error rejecting loan:', error);
-      alert(error.message || 'Failed to reject loan');
+      setToast({ type: 'error', message: error.message || 'Failed to reject loan' });
+      setTimeout(() => setToast(null), 3000);
     }
   };
 
@@ -345,6 +350,15 @@ export default function ManageLoans({ initialStatusFilter = 'All' }: ManageLoans
           onConfirm={confirmAction.action === 'accept' ? confirmAccept : confirmReject}
           onCancel={() => setConfirmAction(null)}
         />
+      )}
+
+      {toast && (
+        <div className={`fixed top-4 right-4 z-[60] px-4 py-3 rounded shadow-lg ${toast.type==='success'?'bg-green-600 text-white':'bg-red-600 text-white'}`}>
+          <div className="flex items-center space-x-2">
+            <span className="font-medium">{toast.type==='success'?'Success':'Error'}</span>
+            <span>{toast.message}</span>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -70,6 +70,7 @@ export default function MerchantProfileGate({ onDone }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [showDistricts, setShowDistricts] = useState(false);
   const [districtQuery, setDistrictQuery] = useState('');
+  // No splash: we will not block the portal during loading
 
   useEffect(() => {
     const init = async () => {
@@ -99,6 +100,7 @@ export default function MerchantProfileGate({ onDone }: Props) {
       }
     };
     init();
+    return () => {};
   }, [profile]);
 
   const currentErrors = useMemo(() => {
@@ -193,14 +195,8 @@ export default function MerchantProfileGate({ onDone }: Props) {
   };
 
   if (loading) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-10 w-10 rounded-full border-4 border-blue-200 dark:border-gray-700 border-t-blue-600 animate-spin" />
-          <p className="text-sm text-gray-600 dark:text-gray-300">Preparing your profile...</p>
-        </div>
-      </div>
-    );
+    // Render nothing during loading so the portal is immediately visible after login
+    return null;
   }
 
   return (

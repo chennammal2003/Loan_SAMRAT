@@ -164,7 +164,8 @@ export default function PersonalDetailsStep({ formData, setFormData, errors }: P
           <option value="">Select Occupation</option>
           <option value="Salaried">Salaried</option>
           <option value="Self-employed">Self-employed</option>
-          <option value="Business">Business</option>
+          <option value="Business">Entrepreneur</option>
+          <option value="Retail Trader">Retail Trader</option>
           <option value="Others">Others</option>
         </select>
         {errors.occupation && <p className="text-red-500 text-sm mt-1">{errors.occupation}</p>}
@@ -182,6 +183,7 @@ export default function PersonalDetailsStep({ formData, setFormData, errors }: P
             placeholder="Enter your occupation"
             className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
           />
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">This will be saved as your occupation.</p>
         </div>
       )}
 

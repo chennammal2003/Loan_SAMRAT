@@ -37,7 +37,7 @@ export default function MerchantDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
-      <aside className="w-64 bg-white dark:bg-gray-800 shadow-lg">
+      <aside className="w-64 bg-white dark:bg-gray-800 shadow-lg sticky top-0 h-screen flex flex-col overflow-hidden">
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
@@ -109,7 +109,7 @@ export default function MerchantDashboard() {
           </button>
         </nav>
 
-        <div className="absolute bottom-0 w-64 p-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="mt-auto w-64 p-4 border-t border-gray-200 dark:border-gray-700">
           <div className="mb-4">
             <div className="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
               <p className="text-sm font-medium text-gray-900 dark:text-white">{profile?.username}</p>
@@ -156,26 +156,20 @@ export default function MerchantDashboard() {
           {activeTab === 'products' && (
             <div className="space-y-6">
               <ProductDescription />
-              {/* Profile panel trigger below product description */}
-              <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Profile</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Manage your merchant profile details</p>
-                </div>
-                <button
-                  onClick={() => setShowProfilePanel(true)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Open Profile
-                </button>
-              </div>
             </div>
           )}
         </div>
       </main>
 
       {showApplyModal && (
-        <ApplyLoanModal onClose={() => setShowApplyModal(false)} />
+        <ApplyLoanModal
+          onClose={() => setShowApplyModal(false)}
+          onSuccess={() => {
+            setShowApplyModal(false);
+            setLoanInitialFilter('All');
+            setActiveTab('loans');
+          }}
+        />
       )}
 
       {/* Slide-over Profile Panel opens on the opposite side (right) */}

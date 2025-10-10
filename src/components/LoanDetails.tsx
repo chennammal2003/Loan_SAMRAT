@@ -128,6 +128,10 @@ export default function LoanDetails({ initialStatusFilter = 'All' }: LoanDetails
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search name, phone, email, address, ID"
           className="w-full md:w-80 px-3 py-2 rounded border bg-white dark:bg-gray-800 dark:border-gray-700 text-sm"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          name="loan-search"
         />
       </div>
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">

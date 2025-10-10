@@ -11,6 +11,7 @@ import DeclarationStep from './loan-steps/DeclarationStep';
 
 interface ApplyLoanModalProps {
   onClose: () => void;
+  onSuccess?: () => void; // called after successful submission
 }
 
 export interface LoanFormData {
@@ -109,7 +110,7 @@ const initialFormData: LoanFormData = {
   declarationAccepted: false,
 };
 
-export default function ApplyLoanModal({ onClose }: ApplyLoanModalProps) {
+export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalProps) {
   const { profile } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<LoanFormData>(initialFormData);
@@ -189,10 +190,114 @@ export default function ApplyLoanModal({ onClose }: ApplyLoanModalProps) {
   const currentErrors = useMemo(() => computeErrors(), [formData]);
   const isFormValid = Object.keys(currentErrors).length === 0;
 
-  const handleNext = () => {
+  // Compute only current step errors for gating Next
+  const computeStepErrors = (step: number): Record<string, string> => {
+    const e: Record<string, string> = {};
+    if (step === 1) {
+      if (!formData.interestScheme) e.interestScheme = 'Required';
+      if (!formData.goldPriceLockDate) e.goldPriceLockDate = 'Required';
+      if (!formData.proformaInvoice) e.proformaInvoice = 'Required';
+      if (!formData.loanAmount) e.loanAmount = 'Required';
+      if (!formData.tenure) e.tenure = 'Required';
+      if (!formData.gstAccepted) e.gstAccepted = 'Please accept GST charges';
+    }
+    if (step === 2) {
+      if (!formData.firstName) e.firstName = 'Required';
+      if (!formData.lastName) e.lastName = 'Required';
+      if (!formData.fatherMotherSpouseName) e.fatherMotherSpouseName = 'Required';
+      if (!formData.dateOfBirth) e.dateOfBirth = 'Required';
+      if (!formData.aadhaarNumber || !/^\d{12}$/.test(formData.aadhaarNumber)) e.aadhaarNumber = 'Enter valid 12-digit Aadhaar';
+      if (!formData.panNumber || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.panNumber)) e.panNumber = 'Enter valid PAN';
+      if (!formData.gender) e.gender = 'Required';
+      if (!formData.maritalStatus) e.maritalStatus = 'Required';
+      if (!formData.occupation) e.occupation = 'Required';
+      if (formData.occupation === 'Others' && !formData.occupationOther) e.occupationOther = 'Please specify';
+      if (!formData.emailId || !/.+@.+\..+/.test(formData.emailId)) e.emailId = 'Enter valid email';
+    }
+    if (step === 3) {
+      if (!formData.address) e.address = 'Required';
+      if (!formData.pinCode || !/^\d{6}$/.test(formData.pinCode)) e.pinCode = 'Enter valid 6-digit PIN';
+      if (!formData.mobilePrimary || !/^[6-9]\d{9}$/.test(formData.mobilePrimary)) e.mobilePrimary = 'Enter valid mobile number';
+    }
+    if (step === 4) {
+      if (!formData.reference1Name) e.reference1Name = 'Required';
+      if (!formData.reference1Address) e.reference1Address = 'Required';
+      if (!formData.reference1Contact || !/^[6-9]\d{9}$/.test(formData.reference1Contact)) e.reference1Contact = 'Enter valid contact';
+      if (!formData.reference1Relationship) e.reference1Relationship = 'Required';
+      if (!formData.reference2Name) e.reference2Name = 'Required';
+      if (!formData.reference2Address) e.reference2Address = 'Required';
+      if (!formData.reference2Contact || !/^[6-9]\d{9}$/.test(formData.reference2Contact)) e.reference2Contact = 'Enter valid contact';
+      if (!formData.reference2Relationship) e.reference2Relationship = 'Required';
+    }
+    if (step === 5) {
+      (['aadhaarCopy','panCopy','utilityBill','bankStatement','photo','proformaInvoice'] as Array<keyof LoanFormData>).forEach((k) => {
+        if (!formData[k]) e[k as string] = 'Required';
+      });
+    }
+    if (step === 6) {
+      if (!formData.declarationAccepted) e.declarationAccepted = 'Please accept declaration';
+    }
+    return e;
+  };
+
+  // Check uniqueness in DB for Personal Details (Step 2)
+  const checkDuplicatePersonalDetails = async (): Promise<Record<string, string>> => {
+    const dupErrors: Record<string, string> = {};
+    try {
+      // 1) Full Name uniqueness (first_name + last_name)
+      if (formData.firstName && formData.lastName) {
+        const { count: nameCount, error: nameErr } = await supabase
+          .from('loans')
+          .select('id', { count: 'exact', head: true })
+          .ilike('first_name', formData.firstName)
+          .ilike('last_name', formData.lastName);
+        if (!nameErr && (nameCount || 0) > 0) {
+          dupErrors.firstName = 'Name already exists';
+          dupErrors.lastName = 'Name already exists';
+        }
+      }
+
+      // 2) PAN uniqueness
+      if (formData.panNumber) {
+        const { count: panCount, error: panErr } = await supabase
+          .from('loans')
+          .select('id', { count: 'exact', head: true })
+          .eq('pan_number', formData.panNumber);
+        if (!panErr && (panCount || 0) > 0) {
+          dupErrors.panNumber = 'PAN Number already exists';
+        }
+      }
+
+      // 3) Aadhaar uniqueness
+      if (formData.aadhaarNumber) {
+        const { count: aadhaarCount, error: aadhaarErr } = await supabase
+          .from('loans')
+          .select('id', { count: 'exact', head: true })
+          .eq('aadhaar_number', formData.aadhaarNumber);
+        if (!aadhaarErr && (aadhaarCount || 0) > 0) {
+          dupErrors.aadhaarNumber = 'Aadhaar Number already exists';
+        }
+      }
+    } catch (e) {
+      // Ignore network errors here; allow submit flow to surface issues later
+    }
+    return dupErrors;
+  };
+
+  const handleNext = async () => {
     if (currentStep < totalSteps) {
-      setCurrentStep(currentStep + 1);
-      setErrors({});
+      // Validate current step fields first
+      const stepErrors = computeStepErrors(currentStep);
+      // For Step 2, also enforce uniqueness checks against DB
+      let dupErrors: Record<string, string> = {};
+      if (currentStep === 2) {
+        dupErrors = await checkDuplicatePersonalDetails();
+      }
+      const combined = { ...stepErrors, ...dupErrors };
+      setErrors(combined);
+      if (Object.keys(combined).length === 0) {
+        setCurrentStep(currentStep + 1);
+      }
     }
   };
 
@@ -318,9 +423,11 @@ export default function ApplyLoanModal({ onClose }: ApplyLoanModalProps) {
           if (docsError) throw docsError;
         }
 
-        setToast({ type: 'success', message: 'Loan Application Submitted Successfully' });
+        // Show confirmation for 3 seconds, then close and navigate
+        setToast({ type: 'success', message: 'Loan Application Submitted Successfully!' });
+        await new Promise((r) => setTimeout(r, 3000));
         onClose();
-        window.location.reload();
+        onSuccess?.();
       } catch (innerErr) {
         // Cleanup: delete uploaded files if any part fails before success
         if (uploadedFiles.length > 0) {
@@ -419,13 +526,15 @@ export default function ApplyLoanModal({ onClose }: ApplyLoanModalProps) {
               <ChevronRight className="w-5 h-5" />
             </button>
           ) : (
-            <button
-              onClick={handleSubmit}
-              disabled={loading || !isFormValid}
-              className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Submitting...' : 'Submit Application'}
-            </button>
+            !loading && (
+              <button
+                onClick={handleSubmit}
+                disabled={loading || !isFormValid}
+                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Submit Application
+              </button>
+            )
           )}
         </div>
       </div>
