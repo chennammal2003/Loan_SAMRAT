@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Shield, LogOut, Moon, Sun, List, CheckCircle, Users, HandCoins } from 'lucide-react';
+import { Shield, LogOut, Moon, Sun, List, CheckCircle, Users, HandCoins, TrendingUp } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import ManageLoans from './ManageLoans';
 import AcceptedLoans from './AcceptedLoans';
 import DisbursedLoans from './DisbursedLoans';
 import MerchantDetails from './MerchantDetails';
 import DashboardStats from './DashboardStats';
+import PaymentTracker from './paymentTracker';
 
-type ActiveTab = 'home' | 'manage' | 'accepted' | 'disbursed' | 'merchants';
+type ActiveTab = 'home' | 'manage' | 'accepted' | 'disbursed' | 'payments' | 'merchants';
 
 export default function AdminDashboard() {
   const { profile, signOut } = useAuth();
@@ -29,8 +30,8 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
-      <aside className="w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col">
+    <div className="h-screen overflow-hidden bg-gray-50 dark:bg-gray-900 flex">
+      <aside className="w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col h-full">
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-orange-600 rounded-full flex items-center justify-center">
@@ -93,6 +94,18 @@ export default function AdminDashboard() {
           </button>
 
           <button
+            onClick={() => setActiveTab('payments')}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+              activeTab === 'payments'
+                ? 'bg-orange-600 text-white'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            <TrendingUp className="w-5 h-5" />
+            <span>Payment Tracker</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('merchants')}
             className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
               activeTab === 'merchants'
@@ -136,6 +149,7 @@ export default function AdminDashboard() {
               {activeTab === 'manage' && 'Manage Loan Applications'}
               {activeTab === 'accepted' && 'Accepted Loans'}
               {activeTab === 'disbursed' && 'Disbursed Loans'}
+              {activeTab === 'payments' && 'Payment Tracker'}
               {activeTab === 'merchants' && 'Merchant Information'}
             </h1>
             <button
@@ -159,6 +173,7 @@ export default function AdminDashboard() {
           {activeTab === 'manage' && <ManageLoans initialStatusFilter={manageInitialFilter} />}
           {activeTab === 'accepted' && <AcceptedLoans />}
           {activeTab === 'disbursed' && <DisbursedLoans />}
+          {activeTab === 'payments' && <PaymentTracker />}
           {activeTab === 'merchants' && <MerchantDetails />}
         </div>
       </main>

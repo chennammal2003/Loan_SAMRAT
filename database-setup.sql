@@ -173,6 +173,7 @@ CREATE TABLE IF NOT EXISTS loan_share_links (
   link_id uuid UNIQUE NOT NULL,
   created_by uuid NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
   created_at timestamptz DEFAULT now(),
+  expires_at timestamptz,
   is_active boolean DEFAULT true,
   opens_count integer DEFAULT 0,
   submissions_count integer DEFAULT 0
@@ -220,7 +221,7 @@ DECLARE
 BEGIN
   SELECT created_by INTO v_creator
   FROM loan_share_links
-  WHERE link_id = p_link_id AND is_active = true
+  WHERE link_id = p_link_id AND is_active = true AND (expires_at IS NULL OR expires_at > now())
   LIMIT 1;
 
   IF v_creator IS NULL THEN

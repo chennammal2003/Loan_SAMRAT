@@ -79,15 +79,14 @@ export default function PublicApplyLoanPage() {
       if (!linkId) return setValid(false);
       const { data, error } = await supabase
         .from('loan_share_links')
-        .select('id')
+        .select('id, is_active, expires_at')
         .eq('link_id', linkId)
-        .eq('is_active', true)
         .maybeSingle();
       if (error) {
         setValid(false);
         return;
       }
-      const ok = !!data;
+      const ok = !!data && data.is_active === true && (!data.expires_at || new Date(data.expires_at) > new Date());
       setValid(ok);
       if (ok) {
         try { await supabase.rpc('track_share_link_open', { p_link_id: linkId }); } catch {}

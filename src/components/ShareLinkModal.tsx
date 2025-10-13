@@ -14,11 +14,15 @@ export default function ShareLinkModal({ onClose }: ShareLinkModalProps) {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'generate' | 'manage'>('generate');
+  const [showExpiryPicker, setShowExpiryPicker] = useState(false);
+  const [customDateTime, setCustomDateTime] = useState<string>('');
+  const [neverExpire, setNeverExpire] = useState(false);
 
   type LinkRow = {
     id: string;
     link_id: string;
     created_at: string;
+    expires_at?: string | null;
     is_active: boolean;
     opens_count: number;
     submissions_count: number;
@@ -36,14 +40,28 @@ export default function ShareLinkModal({ onClose }: ShareLinkModalProps) {
     setError(null);
     try {
       const linkId = crypto.randomUUID();
+      const computeExpiry = (): string | null => {
+        if (neverExpire) return null;
+        if (!customDateTime) throw new Error('Please choose a custom expiry date/time');
+        const d = new Date(customDateTime);
+        if (isNaN(d.getTime()) || d.getTime() <= Date.now()) {
+          throw new Error('Please choose a future date/time');
+        }
+        return d.toISOString();
+      };
+      const expiresAt = computeExpiry();
       const { error: insertErr } = await supabase.from('loan_share_links').insert({
         link_id: linkId,
         created_by: profile.id,
+        expires_at: expiresAt,
       });
       if (insertErr) throw insertErr;
       const origin = window.location.origin;
       setLinkUrl(`${origin}/apply-loan/${linkId}`);
       await fetchRows();
+      setShowExpiryPicker(false);
+      setCustomDateTime('');
+      setNeverExpire(false);
     } catch (e: any) {
       setError(e.message || 'Failed to generate link');
     } finally {
@@ -68,13 +86,30 @@ export default function ShareLinkModal({ onClose }: ShareLinkModalProps) {
         const list = data as LinkRow[];
         setRows(list);
         setLinkIds(list.map((r) => r.id));
+        // augment with expires_at and auto-inactivate expired
+        if (list.length > 0) {
+          const { data: linkMeta } = await supabase
+            .from('loan_share_links')
+            .select('id, expires_at, is_active')
+            .in('id', list.map((r) => r.id));
+          if (Array.isArray(linkMeta)) {
+            const expiredActiveIds = linkMeta
+              .filter((m: any) => !!m.is_active && m.expires_at && new Date(m.expires_at) <= new Date())
+              .map((m: any) => m.id);
+            if (expiredActiveIds.length > 0) {
+              await supabase.from('loan_share_links').update({ is_active: false }).in('id', expiredActiveIds);
+            }
+            // merge expires_at into rows for display logic if needed later
+            setRows((prev) => prev.map((r) => ({ ...r, expires_at: linkMeta.find((m: any) => m.id === r.id)?.expires_at || null })));
+          }
+        }
         return;
       }
 
       // Fallback: manual fetch & aggregate
       const { data: links, error: linkErr } = await supabase
         .from('loan_share_links')
-        .select('id, link_id, created_at, is_active, opens_count, submissions_count')
+        .select('id, link_id, created_at, expires_at, is_active, opens_count, submissions_count')
         .eq('created_by', profile.id)
         .order('created_at', { ascending: false });
       if (linkErr) throw linkErr;
@@ -100,10 +135,20 @@ export default function ShareLinkModal({ onClose }: ShareLinkModalProps) {
         else if (ln.status === 'Rejected') grouped[key].rejected++;
       });
 
+      // auto mark expired links inactive
+      const expiredActiveIds = (links || [])
+        .filter((l: any) => !!l.is_active && l.expires_at && new Date(l.expires_at) <= new Date())
+        .map((l: any) => l.id);
+      if (expiredActiveIds.length > 0) {
+        await supabase.from('loan_share_links').update({ is_active: false }).in('id', expiredActiveIds);
+        (links || []).forEach((l: any) => { if (expiredActiveIds.includes(l.id)) l.is_active = false; });
+      }
+
       const composed: LinkRow[] = (links || []).map((l: any) => ({
         id: l.id,
         link_id: l.link_id,
         created_at: l.created_at,
+        expires_at: l.expires_at,
         is_active: l.is_active,
         opens_count: l.opens_count,
         submissions_count: l.submissions_count,
@@ -122,6 +167,13 @@ export default function ShareLinkModal({ onClose }: ShareLinkModalProps) {
   useEffect(() => {
     if (activeTab === 'manage') fetchRows();
   }, [activeTab]);
+
+  // Auto-open expiry picker when switching to Generate tab and no link yet
+  useEffect(() => {
+    if (activeTab === 'generate' && !linkUrl) {
+      setShowExpiryPicker(true);
+    }
+  }, [activeTab, linkUrl]);
 
   // Realtime updates: update when links or related loans change
   useEffect(() => {
@@ -181,9 +233,11 @@ export default function ShareLinkModal({ onClose }: ShareLinkModalProps) {
               Generate a unique public link that opens the Apply Loan form without login. Submissions will appear under your account.
             </p>
 
+            {/* Expires selector moved to popup; custom-time only */}
+
             {!linkUrl ? (
               <button
-                onClick={generate}
+                onClick={() => setShowExpiryPicker(true)}
                 disabled={generating || !profile}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
               >
@@ -202,6 +256,12 @@ export default function ShareLinkModal({ onClose }: ShareLinkModalProps) {
                   </button>
                 </div>
                 {copied && <p className="text-green-600 text-sm">Copied!</p>}
+                <div>
+                  <button
+                    onClick={() => setShowExpiryPicker(true)}
+                    className="w-full mt-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                  >Generate New Link</button>
+                </div>
               </div>
             )}
 
@@ -271,6 +331,39 @@ export default function ShareLinkModal({ onClose }: ShareLinkModalProps) {
           </div>
         )}
       </div>
+
+      {/* Expiry Picker Modal */}
+      {showExpiryPicker && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowExpiryPicker(false)} />
+          <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Set Link Expiry</h3>
+
+            <div className="space-y-2">
+              <label className="text-sm text-gray-700 dark:text-gray-300">Custom expiry date & time</label>
+              <input
+                type="datetime-local"
+                value={customDateTime}
+                onChange={(e) => setCustomDateTime(e.target.value)}
+                className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              />
+              <label className="inline-flex items-center gap-2 mt-2">
+                <input type="checkbox" checked={neverExpire} onChange={(e) => setNeverExpire(e.target.checked)} />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Never expire</span>
+              </label>
+            </div>
+
+            {error && (
+              <p className="text-sm text-red-600">{error}</p>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button onClick={() => setShowExpiryPicker(false)} className="px-4 py-2 rounded bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200">Cancel</button>
+              <button onClick={generate} className="px-4 py-2 rounded bg-blue-600 text-white">Confirm & Generate</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
