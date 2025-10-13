@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { FileText, LogOut, Moon, Sun, Plus, List, Package, User, HandCoins, Share2 } from 'lucide-react';
+import { FileText, LogOut, Moon, Sun, Plus, List, Package, User, HandCoins, Share2, CreditCard, TrendingUp } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import ApplyLoanModal from './ApplyLoanModal';
 import ShareLinkModal from './ShareLinkModal.tsx';
@@ -11,8 +11,10 @@ import ProductDescription from './ProductDescription';
 import MerchantProfilePanel from './MerchantProfilePanel';
 import DashboardStats from './DashboardStats';
 import MerchantProfileGate from './MerchantProfileGate';
+import Payment from './payment';
+import MerchantPaymentTracker from './MerchantPaymentTracker';
 
-type ActiveTab = 'home' | 'apply' | 'loans' | 'disbursed' | 'products';
+type ActiveTab = 'home' | 'apply' | 'loans' | 'disbursed' | 'payment' | 'paymentTracker' | 'products';
 
 export default function MerchantDashboard() {
   const { profile, signOut } = useAuth();
@@ -107,6 +109,30 @@ export default function MerchantDashboard() {
           </button>
 
           <button
+            onClick={() => setActiveTab('paymentTracker')}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+              activeTab === 'paymentTracker'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            <TrendingUp className="w-5 h-5" />
+            <span>Payment Tracker</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('payment')}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+              activeTab === 'payment'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            <CreditCard className="w-5 h-5" />
+            <span>Payment Details</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('products')}
             className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
               activeTab === 'products'
@@ -156,6 +182,8 @@ export default function MerchantDashboard() {
               {activeTab === 'home' && 'Dashboard'}
               {activeTab === 'loans' && 'My Loan Applications'}
               {activeTab === 'disbursed' && 'My Disbursed Loans'}
+              {activeTab === 'payment' && 'Payment Entry'}
+              {activeTab === 'paymentTracker' && 'My Payment Tracker'}
               {activeTab === 'products' && 'Product Information'}
             </h1>
             <button
@@ -178,6 +206,16 @@ export default function MerchantDashboard() {
           )}
           {activeTab === 'loans' && <LoanDetails initialStatusFilter={loanInitialFilter} />}
           {activeTab === 'disbursed' && <MerchantDisbursedLoans />}
+          {activeTab === 'payment' && (
+            <div className="space-y-6">
+              <Payment />
+            </div>
+          )}
+          {activeTab === 'paymentTracker' && (
+            <div className="space-y-6">
+              <MerchantPaymentTracker />
+            </div>
+          )}
           {activeTab === 'products' && (
             <div className="space-y-6">
               <ProductDescription />

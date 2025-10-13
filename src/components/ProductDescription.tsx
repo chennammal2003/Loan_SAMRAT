@@ -1,4 +1,3 @@
-import React from 'react';
 import { CreditCard, Clock, Shield, TrendingUp, CheckCircle, AlertCircle } from 'lucide-react';
 
 export default function ProductDescription() {

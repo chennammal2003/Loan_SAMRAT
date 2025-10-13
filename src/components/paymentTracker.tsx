@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import {
   TrendingUp,
@@ -39,6 +39,15 @@ const PaymentTracker: React.FC = () => {
   const [loans, setLoans] = useState<LoanApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const tableRef = useRef<HTMLDivElement | null>(null);
+
+  const applyFilterAndScroll = (status: 'current' | 'overdue' | 'paid') => {
+    setFilterStatus(status);
+    // Wait for React state to apply filter and render, then scroll
+    setTimeout(() => {
+      tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  };
 
   useEffect(() => {
     const fetchLoans = async () => {
@@ -91,7 +100,14 @@ const PaymentTracker: React.FC = () => {
       .channel('payments-tracker')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'loans' }, () => fetchLoans())
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    const ch2 = supabase
+      .channel('payments-tracker-payments')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, () => fetchLoans())
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+      supabase.removeChannel(ch2);
+    };
   }, []);
 
   const totalDisbursed = loans.reduce((sum, loan) => sum + loan.loanAmount, 0);
@@ -215,7 +231,12 @@ const PaymentTracker: React.FC = () => {
 
             {/* Status Distribution */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-              <div className="border border-slate-200 dark:border-gray-700 rounded-lg p-4">
+              <div
+                className="border border-slate-200 dark:border-gray-700 rounded-lg p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-gray-700/40 transition-colors"
+                onClick={() => applyFilterAndScroll('current')}
+                role="button"
+                aria-label="Filter Current and scroll to table"
+              >
                 <div className="flex items-center gap-3 mb-3">
                   <div className="bg-green-100 p-2 rounded-lg">
                     <CheckCircle className="w-5 h-5 text-green-600" />
@@ -228,7 +249,12 @@ const PaymentTracker: React.FC = () => {
                 <p className="text-sm text-slate-600 dark:text-gray-300 mt-1">Loans on track</p>
               </div>
 
-              <div className="border border-slate-200 dark:border-gray-700 rounded-lg p-4">
+              <div
+                className="border border-slate-200 dark:border-gray-700 rounded-lg p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-gray-700/40 transition-colors"
+                onClick={() => applyFilterAndScroll('overdue')}
+                role="button"
+                aria-label="Filter Overdue and scroll to table"
+              >
                 <div className="flex items-center gap-3 mb-3">
                   <div className="bg-red-100 p-2 rounded-lg">
                     <AlertCircle className="w-5 h-5 text-red-600" />
@@ -241,7 +267,12 @@ const PaymentTracker: React.FC = () => {
                 <p className="text-sm text-slate-600 dark:text-gray-300 mt-1">Needs attention</p>
               </div>
 
-              <div className="border border-slate-200 dark:border-gray-700 rounded-lg p-4">
+              <div
+                className="border border-slate-200 dark:border-gray-700 rounded-lg p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-gray-700/40 transition-colors"
+                onClick={() => applyFilterAndScroll('paid')}
+                role="button"
+                aria-label="Filter Completed and scroll to table"
+              >
                 <div className="flex items-center gap-3 mb-3">
                   <div className="bg-blue-100 p-2 rounded-lg">
                     <CheckCircle className="w-5 h-5 text-blue-600" />
@@ -293,7 +324,7 @@ const PaymentTracker: React.FC = () => {
         </div>
 
         {/* Loans Table */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 overflow-hidden">
+        <div ref={tableRef} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50 dark:bg-gray-700 border-b border-slate-200 dark:border-gray-700">

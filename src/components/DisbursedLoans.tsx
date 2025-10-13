@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Eye, FileText, HandCoins } from 'lucide-react';
+import { Eye, HandCoins } from 'lucide-react';
 import { supabase, LoanApplication } from '../lib/supabase';
 import LoanDetailsModal from './LoanDetailsModal';
 
