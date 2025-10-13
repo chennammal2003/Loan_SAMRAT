@@ -73,6 +73,28 @@ export default function ManageLoans({ initialStatusFilter = 'All' }: ManageLoans
     fetchLoans();
   }, []);
 
+  // Live updates via Supabase Realtime for admin view (all loans)
+  useEffect(() => {
+    const ch = supabase
+      .channel('loans-admin')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'loans' }, (payload) => {
+        const l = payload.new as any;
+        setLoans((prev) => (prev.some((x) => x.id === l.id) ? prev : [l as any, ...prev]));
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'loans' }, (payload) => {
+        const l = payload.new as any;
+        setLoans((prev) => prev.map((x) => (x.id === l.id ? (l as any) : x)));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'loans' }, (payload) => {
+        const id = (payload.old as any).id;
+        setLoans((prev) => prev.filter((x) => x.id !== id));
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, []);
+
   const fetchLoans = async () => {
     try {
       const { data, error } = await supabase

@@ -7,6 +7,7 @@ import SignUp from './pages/SignUp';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import MerchantDashboard from './components/MerchantDashboard';
+import PublicApplyLoanPage from './pages/PublicApplyLoanPage.tsx';
 import AdminDashboard from './components/AdminDashboard';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -62,6 +63,7 @@ function App() {
             <Route path="/signup" element={<SignUp />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/apply-loan/:linkId" element={<PublicApplyLoanPage />} />
             <Route
               path="/dashboard"
               element={

@@ -24,6 +24,28 @@ export default function LoanDetails({ initialStatusFilter = 'All' }: LoanDetails
     }
   }, [profile]);
 
+  useEffect(() => {
+    if (!profile) return;
+    const ch = supabase
+      .channel(`loans-merchant-${profile.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'loans', filter: `user_id=eq.${profile.id}` }, (payload) => {
+        const l = payload.new as any;
+        setLoans((prev) => (prev.some((x) => x.id === l.id) ? prev : [l as any, ...prev]));
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'loans', filter: `user_id=eq.${profile.id}` }, (payload) => {
+        const l = payload.new as any;
+        setLoans((prev) => prev.map((x) => (x.id === l.id ? (l as any) : x)));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'loans', filter: `user_id=eq.${profile.id}` }, (payload) => {
+        const id = (payload.old as any).id;
+        setLoans((prev) => prev.filter((x) => x.id !== id));
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [profile]);
+
   const fetchLoans = async () => {
     if (!profile) return;
 

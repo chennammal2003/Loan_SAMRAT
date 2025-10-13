@@ -424,7 +424,11 @@ export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalPro
         }
 
         // Show confirmation for 3 seconds, then close and navigate
-        setToast({ type: 'success', message: 'Loan Application Submitted Successfully!' });
+        setToast({
+          type: 'success',
+          message:
+            'Loan has been submitted. Please wait for admin acceptance. Once accepted, you can add the documents. After admin verification, the loan will be disbursed.'
+        });
         await new Promise((r) => setTimeout(r, 3000));
         onClose();
         onSuccess?.();

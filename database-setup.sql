@@ -166,3 +166,208 @@ CREATE TRIGGER update_loans_updated_at
 -- Public: false
 -- File size limit: 5MB
 -- Allowed MIME types: application/pdf, image/jpeg, image/png
+
+-- Shareable Loan Application Links
+CREATE TABLE IF NOT EXISTS loan_share_links (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  link_id uuid UNIQUE NOT NULL,
+  created_by uuid NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+  created_at timestamptz DEFAULT now(),
+  is_active boolean DEFAULT true,
+  opens_count integer DEFAULT 0,
+  submissions_count integer DEFAULT 0
+);
+
+ALTER TABLE loan_share_links ENABLE ROW LEVEL SECURITY;
+
+-- Authenticated users can create their own links
+CREATE POLICY IF NOT EXISTS "Users can insert own share links"
+  ON loan_share_links FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = created_by);
+
+-- Authenticated users can view their own links
+CREATE POLICY IF NOT EXISTS "Users can view own share links"
+  ON loan_share_links FOR SELECT
+  TO authenticated
+  USING (auth.uid() = created_by);
+
+-- Owners can update their links (e.g., activate/deactivate)
+CREATE POLICY IF NOT EXISTS "Users can update own share links"
+  ON loan_share_links FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = created_by)
+  WITH CHECK (auth.uid() = created_by);
+
+-- Public can validate active links (no sensitive data exposed)
+CREATE POLICY IF NOT EXISTS "Public can validate active share links"
+  ON loan_share_links FOR SELECT
+  TO anon
+  USING (is_active = true);
+
+-- RPC: submit loan via public share link
+CREATE OR REPLACE FUNCTION submit_loan_via_share_link(
+  p_link_id uuid,
+  p_payload jsonb
+) RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_creator uuid;
+  v_loan_id uuid;
+BEGIN
+  SELECT created_by INTO v_creator
+  FROM loan_share_links
+  WHERE link_id = p_link_id AND is_active = true
+  LIMIT 1;
+
+  IF v_creator IS NULL THEN
+    RAISE EXCEPTION 'Invalid or inactive link';
+  END IF;
+
+  INSERT INTO loans (
+    user_id,
+    first_name,
+    last_name,
+    father_mother_spouse_name,
+    date_of_birth,
+    aadhaar_number,
+    pan_number,
+    gender,
+    marital_status,
+    occupation,
+    introduced_by,
+    email_id,
+    address,
+    pin_code,
+    landmark,
+    permanent_address,
+    mobile_primary,
+    mobile_alternative,
+    reference1_name,
+    reference1_address,
+    reference1_contact,
+    reference1_relationship,
+    reference2_name,
+    reference2_address,
+    reference2_contact,
+    reference2_relationship,
+    interest_scheme,
+    gold_price_lock_date,
+    down_payment_details,
+    loan_amount,
+    tenure,
+    processing_fee,
+    status,
+    declaration_accepted,
+    share_link_id
+  ) VALUES (
+    v_creator,
+    p_payload->>'first_name',
+    p_payload->>'last_name',
+    p_payload->>'father_mother_spouse_name',
+    (p_payload->>'date_of_birth')::date,
+    p_payload->>'aadhaar_number',
+    p_payload->>'pan_number',
+    p_payload->>'gender',
+    p_payload->>'marital_status',
+    p_payload->>'occupation',
+    p_payload->>'introduced_by',
+    p_payload->>'email_id',
+    p_payload->>'address',
+    p_payload->>'pin_code',
+    p_payload->>'landmark',
+    COALESCE(p_payload->>'permanent_address', p_payload->>'address'),
+    p_payload->>'mobile_primary',
+    p_payload->>'mobile_alternative',
+    p_payload->>'reference1_name',
+    p_payload->>'reference1_address',
+    p_payload->>'reference1_contact',
+    p_payload->>'reference1_relationship',
+    p_payload->>'reference2_name',
+    p_payload->>'reference2_address',
+    p_payload->>'reference2_contact',
+    p_payload->>'reference2_relationship',
+    p_payload->>'interest_scheme',
+    (p_payload->>'gold_price_lock_date')::date,
+    p_payload->>'down_payment_details',
+    (p_payload->>'loan_amount')::numeric,
+    (p_payload->>'tenure')::integer,
+    (p_payload->>'processing_fee')::numeric,
+    'Pending',
+    (p_payload->>'declaration_accepted')::boolean,
+    (SELECT id FROM loan_share_links WHERE link_id = p_link_id)
+  ) RETURNING id INTO v_loan_id;
+
+  -- increment submissions count on the link
+  UPDATE loan_share_links
+  SET submissions_count = submissions_count + 1
+  WHERE link_id = p_link_id;
+
+  RETURN v_loan_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION submit_loan_via_share_link(uuid, jsonb) TO anon, authenticated;
+
+-- Associate loans back to share link for reporting
+ALTER TABLE IF NOT EXISTS loans
+  ADD COLUMN IF NOT EXISTS share_link_id uuid REFERENCES loan_share_links(id);
+
+-- Track an open event for a public link
+CREATE OR REPLACE FUNCTION track_share_link_open(p_link_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE v_id uuid;
+BEGIN
+  SELECT id INTO v_id FROM loan_share_links WHERE link_id = p_link_id AND is_active = true;
+  IF v_id IS NULL THEN
+    RETURN;
+  END IF;
+  UPDATE loan_share_links SET opens_count = opens_count + 1 WHERE id = v_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION track_share_link_open(uuid) TO anon, authenticated;
+
+-- Aggregate stats for the current authenticated user
+CREATE OR REPLACE FUNCTION get_share_link_stats()
+RETURNS TABLE (
+  id uuid,
+  link_id uuid,
+  created_at timestamptz,
+  is_active boolean,
+  opens_count integer,
+  submissions_count integer,
+  pending_count integer,
+  accepted_count integer,
+  rejected_count integer
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  WITH my_links AS (
+    SELECT * FROM loan_share_links WHERE created_by = auth.uid()
+  )
+  SELECT
+    l.id,
+    l.link_id,
+    l.created_at,
+    l.is_active,
+    l.opens_count,
+    l.submissions_count,
+    COALESCE(SUM(CASE WHEN ln.status = 'Pending' THEN 1 ELSE 0 END),0) AS pending_count,
+    COALESCE(SUM(CASE WHEN ln.status = 'Accepted' THEN 1 ELSE 0 END),0) AS accepted_count,
+    COALESCE(SUM(CASE WHEN ln.status = 'Rejected' THEN 1 ELSE 0 END),0) AS rejected_count
+  FROM my_links l
+  LEFT JOIN loans ln ON ln.share_link_id = l.id
+  GROUP BY l.id, l.link_id, l.created_at, l.is_active, l.opens_count, l.submissions_count
+$$;
+
+GRANT EXECUTE ON FUNCTION get_share_link_stats() TO authenticated;

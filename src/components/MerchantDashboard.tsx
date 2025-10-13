@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { FileText, LogOut, Moon, Sun, Plus, List, Package, User, HandCoins } from 'lucide-react';
+import { FileText, LogOut, Moon, Sun, Plus, List, Package, User, HandCoins, Share2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import ApplyLoanModal from './ApplyLoanModal';
+import ShareLinkModal from './ShareLinkModal.tsx';
 import LoanDetails from './LoanDetails';
 import MerchantDisbursedLoans from './MerchantDisbursedLoans';
 import ProductDescription from './ProductDescription';
@@ -19,6 +20,7 @@ export default function MerchantDashboard() {
   const { theme, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [showApplyModal, setShowApplyModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [showProfilePanel, setShowProfilePanel] = useState(false);
   const [loanInitialFilter, setLoanInitialFilter] = useState<'All' | 'Pending' | 'Accepted' | 'Rejected'>('All');
   const [showProfileSetup, setShowProfileSetup] = useState(true);
@@ -70,6 +72,14 @@ export default function MerchantDashboard() {
           >
             <Plus className="w-5 h-5" />
             <span>Apply Loan</span>
+          </button>
+
+          <button
+            onClick={() => setShowShareModal(true)}
+            className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          >
+            <Share2 className="w-5 h-5" />
+            <span>Share Apply Link</span>
           </button>
 
           <button
@@ -185,6 +195,10 @@ export default function MerchantDashboard() {
             setActiveTab('loans');
           }}
         />
+      )}
+
+      {showShareModal && (
+        <ShareLinkModal onClose={() => setShowShareModal(false)} />
       )}
 
       {/* Slide-over Profile Panel opens on the opposite side (right) */}
