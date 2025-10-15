@@ -44,6 +44,7 @@ export default function DisbursedLoans() {
         l.email_id,
         l.address,
         l.id,
+        l.application_number,
       ]
         .filter(Boolean)
         .join(' ')
@@ -88,7 +89,7 @@ export default function DisbursedLoans() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name, phone, email, address, ID"
+            placeholder="Search name, phone, email, address, application ID"
             className="w-full md:w-80 px-3 py-2 rounded border bg-white dark:bg-gray-800 dark:border-gray-700 text-sm"
           />
         </div>
@@ -99,6 +100,7 @@ export default function DisbursedLoans() {
           <table className="w-full">
             <thead className="bg-purple-50 dark:bg-purple-900/20">
               <tr>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Application ID</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Name</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Loan Amount</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Tenure</th>
@@ -110,6 +112,9 @@ export default function DisbursedLoans() {
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {pageItems.map((loan) => (
                 <tr key={loan.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
+                    {loan.application_number || 'N/A'}
+                  </td>
                   <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
                     {loan.first_name} {loan.last_name}
                   </td>

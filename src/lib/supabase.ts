@@ -25,6 +25,7 @@ export interface LoanApplication {
   user_id: string;
   first_name: string;
   last_name: string;
+  application_number?: string;
   father_mother_spouse_name: string;
   date_of_birth: string;
   aadhaar_number: string;

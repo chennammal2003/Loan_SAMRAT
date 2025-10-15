@@ -6,6 +6,7 @@ import PaymentDetailsModal from './PaymentDetailsModal';
 
 interface LoanRow {
   id: string;
+  applicationNumber?: string;
   fullName: string;
   loanAmount: number;
   tenure: number;
@@ -16,7 +17,7 @@ interface LoanRow {
   paidAmount: number;
   remainingAmount: number;
   nextDueDate: string;
-  status: 'ontrack' | 'overdue' | 'paid' | 'default';
+  status: 'ontrack' | 'overdue' | 'paid' | 'bounce' | 'ecs_success';
   paymentsCompleted: number;
   totalPayments: number;
   mobileNumber: string;
@@ -94,27 +95,55 @@ export default function MerchantPaymentTracker() {
           const fullName = `${l.first_name ?? ''} ${l.last_name ?? ''}`.trim();
           const loanAmount = Number(l.amount_disbursed ?? l.loan_amount ?? 0);
           const tenure = Number(l.tenure ?? 0);
-          const emiAmount = tenure > 0 ? Math.round((loanAmount) / tenure) : 0;
-          const totalPayable = Number(l.total_payable ?? loanAmount); 
-          const paidAmount = Number(l.paid_amount ?? 0);
-          const remainingAmount = Math.max(totalPayable - paidAmount, 0);
+          // EMI at 36% p.a. => 3% per month
+          const r = 0.36 / 12;
+          const pow = tenure > 0 ? Math.pow(1 + r, tenure) : 0;
+          const emiAmount = tenure > 0 ? Math.round((loanAmount * r * pow) / (pow - 1)) : 0;
 
           // Determine loan status based on EMI statuses
           const statuses = emiStatuses[l.id] || [];
-          const paidEmiCount = statuses.filter(s => s === 'Paid' || s === 'ECS Success').length;
-          const hasBounce = statuses.some(s => s === 'ECS Bounce');
-          const hasMissed = statuses.some(s => s === 'Due Missed');
+          const paidCount = statuses.filter(s => s === 'Paid').length;
+          const ecsSuccessCount = statuses.filter(s => s === 'ECS Success').length;
+          const bounceCount = statuses.filter(s => s === 'ECS Bounce').length;
+          const overdueCount = statuses.filter(s => s === 'Due Missed').length;
+
           let status: LoanRow['status'] = 'ontrack';
-          if (paidEmiCount === tenure) {
-            status = 'paid';
-          } else if (hasBounce || hasMissed) {
+
+          // Check for bounce status first (highest priority)
+          if (bounceCount > 0) {
+            status = 'bounce';
+          }
+          // Check for overdue status (second highest priority)
+          else if (overdueCount > 0) {
             status = 'overdue';
-          } else if (paidEmiCount > 0) {
+          }
+          // Check if all installments are ECS Success
+          else if (ecsSuccessCount === tenure) {
+            status = 'ecs_success';
+          }
+          // Check if all installments are Paid
+          else if (paidCount === tenure) {
+            status = 'paid';
+          }
+          // Check if we have a mix of Paid and ECS Success
+          else if (paidCount + ecsSuccessCount === tenure) {
+            status = 'paid';
+          }
+          // Default to ontrack if we have some payments but not all
+          else if (paidCount + ecsSuccessCount > 0) {
             status = 'ontrack';
           }
 
+          // Compute paid from DB or statuses fallback
+          const paidAmountDb = Number(l.paid_amount ?? 0);
+          const paidAmountByStatus = (paidCount + ecsSuccessCount) * emiAmount;
+          const paidAmount = Math.max(paidAmountDb, paidAmountByStatus);
+          const totalPayable = tenure * emiAmount;
+          const actualRemaining = Math.max(totalPayable - paidAmount, 0);
+
           return {
             id: l.id,
+            applicationNumber: l.application_number,
             fullName,
             loanAmount,
             tenure,
@@ -123,10 +152,10 @@ export default function MerchantPaymentTracker() {
             emiAmount,
             totalPayable,
             paidAmount,
-            remainingAmount,
+            remainingAmount: actualRemaining,
             nextDueDate: '-',
             status,
-            paymentsCompleted: paidEmiCount,
+            paymentsCompleted: paidCount + ecsSuccessCount,
             totalPayments: tenure,
             mobileNumber: l.mobile_primary ?? '-',
           } as LoanRow;
@@ -148,8 +177,12 @@ export default function MerchantPaymentTracker() {
       .channel(`merchant-payments-${profile.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, () => fetchLoans())
       .subscribe();
+    const ch3 = supabase
+      .channel(`merchant-emi-statuses-${profile.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'emi_statuses' }, () => fetchLoans())
+      .subscribe();
     return () => {
-      supabase.removeChannel(ch); supabase.removeChannel(ch2);
+      supabase.removeChannel(ch); supabase.removeChannel(ch2); supabase.removeChannel(ch3);
     };
   }, [profile?.id]);
 
@@ -157,7 +190,7 @@ export default function MerchantPaymentTracker() {
 
   const filteredLoans = loans.filter(loan => {
     const q = searchTerm.trim().toLowerCase();
-    const matchesSearch = !q || loan.fullName.toLowerCase().includes(q) || loan.id.toLowerCase().includes(q);
+    const matchesSearch = !q || loan.fullName.toLowerCase().includes(q) || loan.id.toLowerCase().includes(q) || (loan.applicationNumber && loan.applicationNumber.toLowerCase().includes(q));
     const matchesFilter = filterStatus === 'all' || loan.status === filterStatus;
     return matchesSearch && matchesFilter;
   });
@@ -167,6 +200,8 @@ export default function MerchantPaymentTracker() {
       case 'ontrack': return <CheckCircle className="w-4 h-4" />;
       case 'overdue': return <AlertCircle className="w-4 h-4" />;
       case 'paid': return <CheckCircle className="w-4 h-4" />;
+      case 'bounce': return <AlertCircle className="w-4 h-4" />;
+      case 'ecs_success': return <CheckCircle className="w-4 h-4" />;
       default: return <CheckCircle className="w-4 h-4" />;
     }
   };
@@ -176,6 +211,8 @@ export default function MerchantPaymentTracker() {
       case 'ontrack': return 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800';
       case 'overdue': return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800';
       case 'paid': return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800';
+      case 'bounce': return 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800';
+      case 'ecs_success': return 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800';
       default: return 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-700/30 dark:text-gray-200 dark:border-gray-700';
     }
   };
@@ -243,7 +280,7 @@ export default function MerchantPaymentTracker() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search by name or loan ID..."
+                placeholder="Search by name, application ID, or loan ID..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 border border-slate-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
@@ -277,6 +314,7 @@ export default function MerchantPaymentTracker() {
             <table className="w-full">
               <thead className="bg-slate-50 dark:bg-gray-700 border-b border-slate-200 dark:border-gray-700">
                 <tr>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Application ID</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Name</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Loan ID</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Loan Amount</th>
@@ -295,6 +333,9 @@ export default function MerchantPaymentTracker() {
                   const progress = loan.totalPayments > 0 ? (paidEmi / loan.totalPayments) * 100 : 0;
                   return (
                     <tr key={loan.id} className="hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-colors">
+                      <td className="py-4 px-6">
+                        <span className="font-semibold text-slate-800 dark:text-white">{loan.applicationNumber || 'N/A'}</span>
+                      </td>
                       <td className="py-4 px-6">
                         <div>
                           <p className="font-medium text-slate-800 dark:text-white">{loan.fullName}</p>
@@ -327,8 +368,8 @@ export default function MerchantPaymentTracker() {
                           <div className="w-full bg-slate-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                             <div
                               className={`h-2 rounded-full transition-all ${
-                                loan.status === 'paid' ? 'bg-green-500' :
-                                loan.status === 'overdue' ? 'bg-yellow-500' : 'bg-blue-500'
+                                loan.status === 'paid' || loan.status === 'ecs_success' ? 'bg-green-500' :
+                                loan.status === 'bounce' || loan.status === 'overdue' ? 'bg-red-500' : 'bg-blue-500'
                               }`}
                               style={{ width: `${progress}%` }}
                             />
@@ -360,6 +401,7 @@ export default function MerchantPaymentTracker() {
         <PaymentDetailsModal
           loan={{
             id: selectedLoan.id,
+            applicationNumber: selectedLoan.applicationNumber,
             fullName: selectedLoan.fullName,
             loanAmount: selectedLoan.loanAmount,
             tenure: selectedLoan.tenure,

@@ -28,7 +28,7 @@ export default function AcceptedLoans() {
       const ref2 = [l.reference2_name, l.reference2_contact, l.reference2_relationship].filter(Boolean).join(' | ');
       const line = [
         escape(`${l.first_name} ${l.last_name}`),
-        textify(l.id),
+        textify(l.application_number || ''),
         escape(l.interest_scheme),
         textify(l.loan_amount),
         textify(l.tenure),
@@ -90,6 +90,7 @@ export default function AcceptedLoans() {
         l.email_id,
         l.address,
         l.id,
+        l.application_number,
       ]
         .filter(Boolean)
         .join(' ')
@@ -137,7 +138,7 @@ export default function AcceptedLoans() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name, phone, email, address, ID"
+            placeholder="Search name, phone, email, address, application ID"
             className="w-full md:w-80 px-3 py-2 rounded border bg-white dark:bg-gray-800 dark:border-gray-700 text-sm"
           />
           <button onClick={downloadCSV} className="px-3 py-2 rounded bg-emerald-600 text-white text-sm hover:bg-emerald-700">Download Excel</button>
@@ -149,6 +150,7 @@ export default function AcceptedLoans() {
           <table className="w-full">
             <thead className="bg-green-50 dark:bg-green-900/20">
               <tr>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Application ID</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Name</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Loan Amount</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Tenure</th>
@@ -160,6 +162,9 @@ export default function AcceptedLoans() {
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {pageItems.map((loan) => (
                 <tr key={loan.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
+                    {loan.application_number || 'N/A'}
+                  </td>
                   <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
                     {loan.first_name} {loan.last_name}
                   </td>

@@ -29,6 +29,13 @@ CREATE POLICY "Users can insert own profile"
   TO authenticated
   WITH CHECK (auth.uid() = id);
 
+-- Sequence for human-friendly application numbers
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'loan_application_number_seq') THEN
+    CREATE SEQUENCE loan_application_number_seq START WITH 1 INCREMENT BY 1;
+  END IF;
+END $$;
+
 -- Create loans table
 CREATE TABLE IF NOT EXISTS loans (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -64,10 +71,24 @@ CREATE TABLE IF NOT EXISTS loans (
   loan_amount numeric NOT NULL,
   tenure integer NOT NULL CHECK (tenure IN (3, 6, 9, 12)),
   processing_fee numeric NOT NULL,
-  status text NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Accepted', 'Rejected')),
+  status text NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Accepted', 'Rejected', 'Verified', 'Loan Disbursed')),
   declaration_accepted boolean NOT NULL DEFAULT false,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now(),
+  documents_uploaded boolean DEFAULT false,
+  documents_uploaded_at timestamptz,
+  verification_status text DEFAULT 'Pending' CHECK (verification_status IN ('Pending', 'Verified')),
+  verified_at timestamptz,
+  verified_by uuid REFERENCES user_profiles(id),
+  disbursement_date date,
+  amount_disbursed numeric,
+  transaction_reference text,
+  disbursement_proof_url text,
+  disbursement_remarks text,
+  disbursed_at timestamptz,
+  share_link_id uuid REFERENCES loan_share_links(id),
+  paid_amount numeric NOT NULL DEFAULT 0,
+  application_number text UNIQUE DEFAULT ('App' || lpad((nextval('loan_application_number_seq'))::text, 3, '0')),
   UNIQUE (user_id, first_name, last_name)
 );
 
@@ -97,6 +118,35 @@ CREATE POLICY "Admins can update all loans"
   TO authenticated
   USING (EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
   WITH CHECK (EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'));
+
+-- Create merchant_profiles table
+CREATE TABLE IF NOT EXISTS merchant_profiles (
+  merchant_id uuid PRIMARY KEY REFERENCES user_profiles(id) ON DELETE CASCADE,
+  business_name text,
+  owner_name text,
+  email text,
+  phone text,
+  age integer,
+  business_type text,
+  business_category text,
+  gst_number text,
+  pan_number text,
+  bank_name text,
+  account_number text,
+  ifsc_code text,
+  upi_id text,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  address text
+);
+
+ALTER TABLE merchant_profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY IF NOT EXISTS "Merchants can manage own merchant profile"
+  ON merchant_profiles FOR ALL
+  TO authenticated
+  USING (auth.uid() = merchant_id)
+  WITH CHECK (auth.uid() = merchant_id);
 
 -- Create loan_documents table
 CREATE TABLE IF NOT EXISTS loan_documents (
@@ -133,11 +183,188 @@ CREATE POLICY "Users can insert documents for their loans"
     )
   );
 
+-- Create emi_statuses table for tracking individual EMI payment statuses
+CREATE TABLE IF NOT EXISTS emi_statuses (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  loan_id uuid NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+  installment_index integer NOT NULL CHECK (installment_index >= 0),
+  status text NOT NULL CHECK (status IN ('Pending', 'Paid', 'ECS Success', 'ECS Bounce', 'Due Missed')),
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE (loan_id, installment_index)
+);
+
+ALTER TABLE emi_statuses ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view EMI statuses for their loans"
+  ON emi_statuses FOR SELECT
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM loans
+      WHERE loans.id = emi_statuses.loan_id
+      AND (loans.user_id = auth.uid() OR EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
+    )
+  );
+
+CREATE POLICY "Users can update EMI statuses for their loans"
+  ON emi_statuses FOR UPDATE
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM loans
+      WHERE loans.id = emi_statuses.loan_id
+      AND (loans.user_id = auth.uid() OR EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM loans
+      WHERE loans.id = emi_statuses.loan_id
+      AND (loans.user_id = auth.uid() OR EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
+    )
+  );
+
+CREATE POLICY "Users can insert EMI statuses for their loans"
+  ON emi_statuses FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM loans
+      WHERE loans.id = emi_statuses.loan_id
+      AND (loans.user_id = auth.uid() OR EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
+    )
+  );
+
+-- Create emi_status_audit table for tracking EMI status changes
+CREATE TABLE IF NOT EXISTS emi_status_audit (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  loan_id uuid NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+  installment_index integer NOT NULL,
+  old_status text,
+  new_status text NOT NULL,
+  changed_by uuid REFERENCES user_profiles(id),
+  changed_at timestamptz DEFAULT now(),
+  amount_affected numeric,
+  notes text
+);
+
+ALTER TABLE emi_status_audit ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view EMI audit for their loans"
+  ON emi_status_audit FOR SELECT
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM loans
+      WHERE loans.id = emi_status_audit.loan_id
+      AND (loans.user_id = auth.uid() OR EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
+    )
+  );
+
+CREATE POLICY "Users can insert EMI audit for their loans"
+  ON emi_status_audit FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM loans
+      WHERE loans.id = emi_status_audit.loan_id
+      AND (loans.user_id = auth.uid() OR EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
+    )
+  );
+
+-- Create loan_disbursements table for tracking disbursement dates
+CREATE TABLE IF NOT EXISTS loan_disbursements (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  loan_id uuid NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+  disbursement_date date NOT NULL,
+  amount_disbursed numeric NOT NULL,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE loan_disbursements ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view disbursements for their loans"
+  ON loan_disbursements FOR SELECT
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM loans
+      WHERE loans.id = loan_disbursements.loan_id
+      AND (loans.user_id = auth.uid() OR EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
+    )
+  );
+
+CREATE POLICY "Users can insert disbursements for their loans"
+  ON loan_disbursements FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM loans
+      WHERE loans.id = loan_disbursements.loan_id
+      AND (loans.user_id = auth.uid() OR EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
+    )
+  );
+
+-- Create payments table for recording individual payments
+CREATE TABLE IF NOT EXISTS payments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  loan_id uuid NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+  borrower_name text,
+  mobile_number text,
+  payment_date date NOT NULL,
+  payment_amount numeric NOT NULL,
+  payment_mode text NOT NULL,
+  transaction_id text,
+  bank_name text,
+  cheque_number text,
+  upi_id text,
+  remarks text,
+  proof_path text,
+  proof_url text,
+  late_fee numeric DEFAULT 0,
+  penalty_amount numeric DEFAULT 0,
+  total_paid numeric NOT NULL,
+  receipt_number text,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view payments for their loans"
+  ON payments FOR SELECT
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM loans
+      WHERE loans.id = payments.loan_id
+      AND (loans.user_id = auth.uid() OR EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
+    )
+  );
+
+CREATE POLICY "Users can insert payments for their loans"
+  ON payments FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM loans
+      WHERE loans.id = payments.loan_id
+      AND (loans.user_id = auth.uid() OR EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
+    )
+  );
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_loans_user_id ON loans(user_id);
 CREATE INDEX IF NOT EXISTS idx_loans_status ON loans(status);
 CREATE INDEX IF NOT EXISTS idx_loan_documents_loan_id ON loan_documents(loan_id);
 CREATE INDEX IF NOT EXISTS idx_user_profiles_role ON user_profiles(role);
+CREATE INDEX IF NOT EXISTS idx_emi_statuses_loan_id ON emi_statuses(loan_id);
+CREATE INDEX IF NOT EXISTS idx_emi_statuses_installment_index ON emi_statuses(installment_index);
+CREATE INDEX IF NOT EXISTS idx_emi_status_audit_loan_id ON emi_status_audit(loan_id);
+CREATE INDEX IF NOT EXISTS idx_emi_status_audit_changed_at ON emi_status_audit(changed_at);
+CREATE INDEX IF NOT EXISTS idx_loans_paid_amount ON loans(paid_amount);
+CREATE INDEX IF NOT EXISTS idx_payments_loan_id ON payments(loan_id);
+CREATE INDEX IF NOT EXISTS idx_payments_payment_date ON payments(payment_date);
+CREATE INDEX IF NOT EXISTS idx_loan_disbursements_loan_id ON loan_disbursements(loan_id);
 
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()

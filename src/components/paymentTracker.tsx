@@ -1,13 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 import {
-  TrendingUp,
-  DollarSign,
-  Calendar,
   CheckCircle,
   AlertCircle,
   Clock,
-  Users,
   Download,
   Search,
   Filter
@@ -27,7 +23,7 @@ interface LoanApplication {
   paidAmount: number;
   remainingAmount: number;
   nextDueDate: string;
-  status: 'ontrack' | 'overdue' | 'paid' | 'default';
+  status: 'ontrack' | 'overdue' | 'paid' | 'bounce' | 'ecs_success';
   paymentsCompleted: number;
   totalPayments: number;
   mobileNumber: string;
@@ -40,16 +36,11 @@ const PaymentTracker: React.FC = () => {
   const [loans, setLoans] = useState<LoanApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const tableRef = useRef<HTMLDivElement | null>(null);
   const [selectedLoan, setSelectedLoan] = useState<LoanApplication | null>(null);
 
-  const applyFilterAndScroll = (status: 'ontrack' | 'overdue' | 'paid') => {
-    setFilterStatus(status);
-    // Wait for React state to apply filter and render, then scroll
-    setTimeout(() => {
-      tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 0);
-  };
+  // Removed applyFilterAndScroll (no longer needed after UI simplification)
 
   useEffect(() => {
     const fetchLoans = async () => {
@@ -105,24 +96,53 @@ const PaymentTracker: React.FC = () => {
           const fullName = `${l.first_name ?? ''} ${l.last_name ?? ''}`.trim();
           const loanAmount = Number(l.amount_disbursed ?? l.loan_amount ?? 0);
           const tenure = Number(l.tenure ?? 0);
-          const emiAmount = tenure > 0 ? Math.round((loanAmount) / tenure) : 0;
-          const totalPayable = Number(l.total_payable ?? loanAmount); 
-          const paidAmount = Number(l.paid_amount ?? 0);
-          const remainingAmount = Math.max(totalPayable - paidAmount, 0);
+          // EMI at 36% p.a. => monthly 3%
+          const r = 0.36 / 12;
+          const pow = tenure > 0 ? Math.pow(1 + r, tenure) : 0;
+          const emiAmount = tenure > 0 ? Math.round((loanAmount * r * pow) / (pow - 1)) : 0;
+
+          // Remaining/collected computed after statuses & DB paid_amount are known
 
           // Determine loan status based on EMI statuses
           const statuses = emiStatuses[l.id] || [];
-          const paidEmiCount = statuses.filter(s => s === 'Paid' || s === 'ECS Success').length;
-          const hasBounce = statuses.some(s => s === 'ECS Bounce');
-          const hasMissed = statuses.some(s => s === 'Due Missed');
+          const paidCount = statuses.filter(s => s === 'Paid').length;
+          const ecsSuccessCount = statuses.filter(s => s === 'ECS Success').length;
+          const bounceCount = statuses.filter(s => s === 'ECS Bounce').length;
+          const overdueCount = statuses.filter(s => s === 'Due Missed').length;
+
           let status: LoanApplication['status'] = 'ontrack';
-          if (paidEmiCount === tenure) {
-            status = 'paid';
-          } else if (hasBounce || hasMissed) {
+
+          // Check for bounce status first (highest priority)
+          if (bounceCount > 0) {
+            status = 'bounce';
+          }
+          // Check for overdue status (second highest priority)
+          else if (overdueCount > 0) {
             status = 'overdue';
-          } else if (paidEmiCount > 0) {
+          }
+          // Check if all installments are ECS Success
+          else if (ecsSuccessCount === tenure) {
+            status = 'ecs_success';
+          }
+          // Check if all installments are Paid
+          else if (paidCount === tenure) {
+            status = 'paid';
+          }
+          // Check if we have a mix of Paid and ECS Success
+          else if (paidCount + ecsSuccessCount === tenure) {
+            status = 'paid';
+          }
+          // Default to ontrack if we have some payments but not all
+          else if (paidCount + ecsSuccessCount > 0) {
             status = 'ontrack';
           }
+
+          // Compute collected and remaining
+          const paidAmountDb = Number(l.paid_amount ?? 0);
+          const paidAmountByStatus = (paidCount + ecsSuccessCount) * emiAmount;
+          const paidAmount = Math.max(paidAmountDb, paidAmountByStatus);
+          const totalPayable = tenure * emiAmount;
+          const remainingAmount = Math.max(totalPayable - paidAmount, 0);
 
           return {
             id: l.id,
@@ -134,16 +154,17 @@ const PaymentTracker: React.FC = () => {
             emiAmount,
             totalPayable,
             paidAmount,
-            remainingAmount,
+            remainingAmount, // calculated from statuses/DB
             nextDueDate: '-',
             status,
-            paymentsCompleted: paidEmiCount,
+            paymentsCompleted: paidCount + ecsSuccessCount,
             totalPayments: tenure,
             mobileNumber: l.mobile_primary ?? '-',
             introducedBy: l.introduced_by ?? '-',
           } as LoanApplication;
         });
         setLoans(rows);
+        setLastUpdated(new Date()); // Update timestamp when data is refreshed
       } catch (e: any) {
         setError(e.message || 'Failed to load loans');
       } finally {
@@ -159,18 +180,19 @@ const PaymentTracker: React.FC = () => {
       .channel('payments-tracker-payments')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, () => fetchLoans())
       .subscribe();
+    const ch3 = supabase
+      .channel('payments-tracker-emi-statuses')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'emi_statuses' }, () => fetchLoans())
+      .subscribe();
     return () => {
       supabase.removeChannel(ch);
       supabase.removeChannel(ch2);
+      supabase.removeChannel(ch3);
     };
   }, []);
 
-  const totalDisbursed = loans.reduce((sum, loan) => sum + loan.loanAmount, 0);
-  const totalCollected = loans.reduce((sum, loan) => sum + loan.paidAmount, 0);
-  const totalOutstanding = loans.reduce((sum, loan) => sum + loan.remainingAmount, 0);
-  const activeLoans = loans.filter(loan => loan.status !== 'paid').length;
-  const overdueLoans = loans.filter(loan => loan.status === 'overdue').length;
-  const collectionRate = ((totalCollected / (totalDisbursed + (totalDisbursed * 0.05))) * 100).toFixed(1);
+  // (Removed) Portfolio header cards; keeping page minimal per request
+
 
   const filteredLoans = loans.filter(loan => {
     const matchesSearch = loan.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -181,19 +203,22 @@ const PaymentTracker: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'current': return 'bg-green-100 text-green-800 border-green-200';
-      case 'overdue': return 'bg-red-100 text-red-800 border-red-200';
-      case 'paid': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'default': return 'bg-gray-100 text-gray-800 border-gray-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'ontrack': return 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800';
+      case 'overdue': return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800';
+      case 'paid': return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800';
+      case 'bounce': return 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800';
+      case 'ecs_success': return 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-700/30 dark:text-gray-200 dark:border-gray-700';
     }
   };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'current': return <CheckCircle className="w-4 h-4" />;
+      case 'ontrack': return <CheckCircle className="w-4 h-4" />;
       case 'overdue': return <AlertCircle className="w-4 h-4" />;
       case 'paid': return <CheckCircle className="w-4 h-4" />;
+      case 'bounce': return <AlertCircle className="w-4 h-4" />;
+      case 'ecs_success': return <CheckCircle className="w-4 h-4" />;
       default: return <Clock className="w-4 h-4" />;
     }
   };
@@ -203,145 +228,16 @@ const PaymentTracker: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-2">Payment Tracker</h1>
-          <p className="text-slate-600 dark:text-gray-300">Monitor loan repayments and collection status</p>
-        </div>
-
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <div className="bg-blue-100 p-3 rounded-lg">
-                <DollarSign className="w-6 h-6 text-blue-600" />
-              </div>
-              <TrendingUp className="w-5 h-5 text-green-500" />
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-slate-600 dark:text-gray-300 font-medium">Total Disbursed</p>
-              <p className="text-2xl font-bold text-slate-800 dark:text-white">₹{totalDisbursed.toLocaleString()}</p>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <div className="bg-green-100 p-3 rounded-lg">
-                <CheckCircle className="w-6 h-6 text-green-600" />
-              </div>
-              <span className="text-xs font-semibold text-green-600 bg-green-100 px-2 py-1 rounded-full">
-                {collectionRate}%
-              </span>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-slate-600 dark:text-gray-300 font-medium">Total Collected</p>
-              <p className="text-2xl font-bold text-slate-800 dark:text-white">₹{totalCollected.toLocaleString()}</p>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <div className="bg-orange-100 p-3 rounded-lg">
-                <Clock className="w-6 h-6 text-orange-600" />
-              </div>
-              <span className="text-xs font-semibold text-orange-600 bg-orange-100 px-2 py-1 rounded-full">
-                {overdueLoans}
-              </span>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-slate-600 dark:text-gray-300 font-medium">Outstanding Amount</p>
-              <p className="text-2xl font-bold text-slate-800 dark:text-white">₹{totalOutstanding.toLocaleString()}</p>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <div className="bg-purple-100 p-3 rounded-lg">
-                <Users className="w-6 h-6 text-purple-600" />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-slate-600 dark:text-gray-300 font-medium">Active Loans</p>
-              <p className="text-2xl font-bold text-slate-800 dark:text-white">{activeLoans}</p>
-              <p className="text-xs text-slate-500 dark:text-gray-400">out of {loans.length} total</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Visualization - Collection Progress Chart */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 p-6 mb-8">
-          <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Collection Overview</h2>
-          <div className="space-y-6">
-            {/* Overall Progress */}
+          <div className="flex items-center justify-between">
             <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium text-slate-600 dark:text-gray-300">Overall Collection Rate</span>
-                <span className="text-sm font-bold text-green-600">{collectionRate}%</span>
-              </div>
-              <div className="w-full bg-slate-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
-                <div
-                  className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full transition-all duration-500"
-                  style={{ width: `${collectionRate}%` }}
-                />
-              </div>
+              <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-2">Payment Tracker</h1>
+              
             </div>
-
-            {/* Status Distribution */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-              <div
-                className="border border-slate-200 dark:border-gray-700 rounded-lg p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-gray-700/40 transition-colors"
-                onClick={() => applyFilterAndScroll('ontrack')}
-                role="button"
-                aria-label="Filter On Track and scroll to table"
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="bg-green-100 p-2 rounded-lg">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                  </div>
-                  <span className="font-semibold text-slate-700 dark:text-gray-200">On Track</span>
-                </div>
-                <p className="text-2xl font-bold text-slate-800 dark:text-white">
-                  {loans.filter(l => l.status === 'ontrack').length}
-                </p>
-                <p className="text-sm text-slate-600 dark:text-gray-300 mt-1">Loans on track</p>
-              </div>
-
-              <div
-                className="border border-slate-200 dark:border-gray-700 rounded-lg p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-gray-700/40 transition-colors"
-                onClick={() => applyFilterAndScroll('ontrack')}
-                role="button"
-                aria-label="Filter On Track and scroll to table"
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="bg-red-100 p-2 rounded-lg">
-                    <AlertCircle className="w-5 h-5 text-red-600" />
-                  </div>
-                  <span className="font-semibold text-slate-700 dark:text-gray-200">Overdue</span>
-                </div>
-                <p className="text-2xl font-bold text-slate-800 dark:text-white">
-                  {overdueLoans}
-                </p>
-                <p className="text-sm text-slate-600 dark:text-gray-300 mt-1">Needs attention</p>
-              </div>
-
-              <div
-                className="border border-slate-200 dark:border-gray-700 rounded-lg p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-gray-700/40 transition-colors"
-                onClick={() => applyFilterAndScroll('paid')}
-                role="button"
-                aria-label="Filter Completed and scroll to table"
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="bg-blue-100 p-2 rounded-lg">
-                    <CheckCircle className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <span className="font-semibold text-slate-700 dark:text-gray-200">Completed</span>
-                </div>
-                <p className="text-2xl font-bold text-slate-800 dark:text-white">
-                  {loans.filter(l => l.status === 'paid').length}
-                </p>
-                <p className="text-sm text-slate-600 dark:text-gray-300 mt-1">Fully repaid</p>
-              </div>
-            </div>
+            
           </div>
         </div>
+
+        {/* Removed statistics cards and collection overview per request */}
 
         {/* Search and Filters */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 p-6 mb-6">
@@ -367,7 +263,9 @@ const PaymentTracker: React.FC = () => {
                   <option value="all">All Status</option>
                   <option value="ontrack">On Track</option>
                   <option value="overdue">Overdue</option>
+                  <option value="bounce">Bounce</option>
                   <option value="paid">Paid</option>
+                  <option value="ecs_success">ECS Success</option>
                 </select>
               </div>
               <button className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 font-medium">
@@ -389,7 +287,8 @@ const PaymentTracker: React.FC = () => {
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Loan Amount</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Tenure</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Paid EMI</th>
-                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Remaining</th>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Collected</th>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Remaining Amount</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Status</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Progress</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Actions</th>
@@ -398,7 +297,6 @@ const PaymentTracker: React.FC = () => {
               <tbody className="divide-y divide-slate-200 dark:divide-gray-700">
                 {filteredLoans.map((loan) => {
                   const paidEmi = loan.paymentsCompleted;
-                  const remainingEmi = Math.max(loan.totalPayments - paidEmi, 0);
                   const progress = loan.totalPayments > 0 ? (paidEmi / loan.totalPayments) * 100 : 0;
                   return (
                     <tr key={loan.id} className="hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-colors">
@@ -421,7 +319,10 @@ const PaymentTracker: React.FC = () => {
                         <span className="font-medium text-slate-800 dark:text-white">{paidEmi}</span>
                       </td>
                       <td className="py-4 px-6">
-                        <span className="font-medium text-slate-800 dark:text-white">{remainingEmi}</span>
+                        <span className="font-medium text-slate-800 dark:text-white">₹{loan.paidAmount.toLocaleString('en-IN')}</span>
+                      </td>
+                      <td className="py-4 px-6">
+                        <span className="font-medium text-slate-800 dark:text-white">₹{loan.remainingAmount.toLocaleString('en-IN')}</span>
                       </td>
                       <td className="py-4 px-6">
                         <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${getStatusColor(loan.status)}`}>
@@ -434,8 +335,8 @@ const PaymentTracker: React.FC = () => {
                           <div className="w-full bg-slate-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                             <div
                               className={`h-2 rounded-full transition-all ${
-                                loan.status === 'paid' ? 'bg-green-500' :
-                                loan.status === 'overdue' ? 'bg-yellow-500' : 'bg-blue-500'
+                                loan.status === 'paid' || loan.status === 'ecs_success' ? 'bg-green-500' :
+                                loan.status === 'bounce' || loan.status === 'overdue' ? 'bg-red-500' : 'bg-blue-500'
                               }`}
                               style={{ width: `${progress}%` }}
                             />
@@ -473,7 +374,7 @@ const PaymentTracker: React.FC = () => {
               Showing <span className="font-semibold text-slate-800 dark:text-white">{filteredLoans.length}</span> of <span className="font-semibold text-slate-800 dark:text-white">{loans.length}</span> loans
             </div>
             <div className="text-sm text-slate-500 dark:text-gray-400">
-              Last updated: {new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+              Last updated: {lastUpdated.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
             </div>
           </div>
         </div>
@@ -513,6 +414,16 @@ const PaymentTracker: React.FC = () => {
             disbursedDate: selectedLoan.disbursedDate
           }}
           onClose={() => setSelectedLoan(null)}
+          onUpdated={({ loanId, paidAmount, paymentsCompleted, status }) => {
+            setLoans(prev => prev.map(l => l.id === loanId
+              ? { ...l, paidAmount, remainingAmount: Math.max(l.totalPayable - paidAmount, 0), paymentsCompleted, status }
+              : l
+            ));
+            setSelectedLoan(prev => prev && prev.id === loanId
+              ? ({ ...prev, paidAmount, remainingAmount: Math.max(prev.totalPayable - paidAmount, 0), paymentsCompleted, status } as any)
+              : prev
+            );
+          }}
         />
       )}
     </>

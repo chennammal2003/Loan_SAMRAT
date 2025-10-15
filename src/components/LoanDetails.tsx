@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Eye, FileText } from 'lucide-react';
 import { supabase, LoanApplication } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';

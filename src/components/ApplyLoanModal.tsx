@@ -423,6 +423,43 @@ export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalPro
           if (docsError) throw docsError;
         }
 
+        const emailWebhook = import.meta.env.VITE_EMAIL_WEBHOOK_URL as string | undefined;
+        if (emailWebhook) {
+          try {
+            const payload = {
+              to: formData.emailId,
+              subject: `Loan Application Submitted - ${formData.firstName} ${formData.lastName}`,
+              loanId: loanData.id,
+              applicationNumber: (loanData as any).application_number || null,
+              applicant: {
+                firstName: formData.firstName,
+                lastName: formData.lastName,
+                email: formData.emailId,
+                mobile: formData.mobilePrimary,
+                address: formData.address,
+                pinCode: formData.pinCode,
+              },
+              loan: {
+                amount: parseFloat(formData.loanAmount),
+                tenure: parseInt(formData.tenure),
+                interestScheme: formData.interestScheme,
+                processingFee: formData.processingFee,
+                goldPriceLockDate: formData.goldPriceLockDate,
+              },
+              references: [
+                { name: formData.reference1Name, contact: formData.reference1Contact, relationship: formData.reference1Relationship },
+                { name: formData.reference2Name, contact: formData.reference2Contact, relationship: formData.reference2Relationship },
+              ],
+              documents: uploadedFiles.map(u => ({ type: u.type, url: u.publicUrl, path: u.path, fileName: u.file.name })),
+            };
+            fetch(emailWebhook, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            }).catch(() => {});
+          } catch {}
+        }
+
         // Show confirmation for 3 seconds, then close and navigate
         setToast({
           type: 'success',

@@ -99,7 +99,6 @@ const Payment: React.FC = () => {
       let proof_url: string | null = null;
       if (formData.paymentProof) {
         const file = formData.paymentProof;
-        const ext = file.name.split('.').pop() || 'bin';
         const filePath = `${loanId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9_.-]/g, '')}`;
         const { error: upErr } = await supabase.storage.from('payment_proofs').upload(filePath, file, {
           upsert: false,

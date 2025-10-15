@@ -124,14 +124,38 @@ export default function LoanDetailsStep({ formData, setFormData, errors, setErro
 
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Processing Fee (3% + GST)
+          Tenure-wise EMI Breakup
         </label>
-        <input
-          type="text"
-          value={formData.processingFee ? `₹${formData.processingFee.toFixed(2)}` : '₹0.00'}
-          readOnly
-          className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-600 text-gray-900 dark:text-white"
-        />
+        <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+          {formData.loanAmount && formData.tenure ? (
+            <div className="space-y-2">
+              {(() => {
+                const loanAmount = parseFloat(formData.loanAmount);
+                const tenure = parseInt(formData.tenure);
+
+                // EMI calculation using standard formula: EMI = P * r * (1+r)^n / ((1+r)^n - 1)
+                // Where r = 0.03 (3% monthly interest rate), n = tenure in months, P = principal
+                const calculateEMI = (principal: number, months: number, monthlyRate: number = 0.03) => {
+                  const rate = monthlyRate;
+                  const numerator = principal * rate * Math.pow(1 + rate, months);
+                  const denominator = Math.pow(1 + rate, months) - 1;
+                  return Math.round(numerator / denominator);
+                };
+
+                const emiAmount = calculateEMI(loanAmount, tenure);
+
+                return (
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    <p><strong>{tenure} Months:</strong> ₹{emiAmount.toLocaleString('en-IN')} / month</p>
+                    <p className="text-xs mt-1">Total Payable: ₹{(emiAmount * tenure).toLocaleString('en-IN')}</p>
+                  </div>
+                );
+              })()}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400">Select loan amount and tenure to see EMI breakup</p>
+          )}
+        </div>
       </div>
 
       <div>

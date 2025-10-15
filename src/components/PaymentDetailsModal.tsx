@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 export type TrackerLoan = {
   id: string;
+  applicationNumber?: string;
   fullName: string;
   loanAmount: number;
   tenure: number; // in months
@@ -22,12 +24,29 @@ interface PaymentDetailsModalProps {
   loan: TrackerLoan;
   onClose: () => void;
   readOnly?: boolean; // Hide update column for read-only views
+  onUpdated?: (u: { loanId: string; paidAmount: number; paymentsCompleted: number; status: 'ontrack' | 'overdue' | 'paid' | 'bounce' | 'ecs_success' }) => void;
 }
 
-export default function PaymentDetailsModal({ loan, onClose, readOnly = false }: PaymentDetailsModalProps) {
+export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadOnly = false, onUpdated }: PaymentDetailsModalProps) {
+  const { profile } = useAuth();
   const [rows, setRows] = useState<PaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Determine if editing should be allowed based on user role and prop
+  const isAdmin = profile?.role === 'admin';
+  const readOnly = propReadOnly || !isAdmin;
+
+  // Compute EMI using standard formula at 36% p.a. (monthly rate 3%)
+  const computedEmi = useMemo(() => {
+    const P = Number(loan.loanAmount || 0);
+    const n = Math.max(Number(loan.tenure || 0), 0);
+    const r = 0.36 / 12; // 3% per month
+    if (P <= 0 || n <= 0) return 0;
+    const pow = Math.pow(1 + r, n);
+    const emi = (P * r * pow) / (pow - 1);
+    return Math.round(emi);
+  }, [loan.loanAmount, loan.tenure]);
 
   const schedule = useMemo(() => {
     const result: { monthLabel: string; dueDate: Date }[] = [];
@@ -73,7 +92,7 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly = false }:
             .filter((p) => p.date.getTime() <= endOfMonth.getTime())
             .reduce((s, p) => s + p.amount, 0);
           // Determine how many EMIs covered by paid amount
-          const emisCovered = Math.floor(paidThisCutoff / Math.max(loan.emiAmount, 1));
+          const emisCovered = Math.floor(paidThisCutoff / Math.max(computedEmi, 1));
           const index = schedule.indexOf(slot);
           const covered = emisCovered > index; // this installment index covered
           const status: PaymentRow['status'] = covered ? 'Paid' : 'Pending';
@@ -82,7 +101,7 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly = false }:
             dueDateStr: endOfMonth
               ? slot.dueDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
               : '-',
-            amount: loan.emiAmount,
+            amount: computedEmi,
             status,
           };
         });
@@ -114,57 +133,196 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly = false }:
       }
     };
     fetchPayments();
-  }, [loan.id, loan.emiAmount, schedule]);
+  }, [loan.id, computedEmi, schedule]);
 
-  const setRowStatus = (i: number, status: PaymentRow['status']) => {
+  const setRowStatus = async (i: number, status: PaymentRow['status']) => {
+    // Update UI immediately for responsiveness
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, status } : r)));
-    // Optimistically persist to emi_statuses (ignore if table not present)
-    const upsert = async () => {
+
+    // Get the current status of this EMI before the change for logging
+    const { data: currentEmiData } = await supabase
+      .from('emi_statuses')
+      .select('status')
+      .eq('loan_id', loan.id)
+      .eq('installment_index', i)
+      .single();
+
+    const oldStatus = currentEmiData?.status as PaymentRow['status'] || 'Pending';
+
+    try {
+      let newPaidAmountComputed: number | null = null;
+      let newLoanStatusComputed: 'ontrack' | 'overdue' | 'paid' | 'bounce' | 'ecs_success' | null = null;
+      let paymentsCompletedComputed: number | null = null;
+      // 1. First, save EMI status to database
+      await new Promise<void>((resolve, reject) => {
+        const upsert = async () => {
+          try {
+            const { error } = await supabase.from('emi_statuses').upsert(
+              [{ loan_id: loan.id, installment_index: i, status, updated_at: new Date().toISOString() }],
+              { onConflict: 'loan_id,installment_index' } as any
+            );
+            if (error) {
+              // If upsert with onConflict not supported, try plain upsert without option
+              await supabase.from('emi_statuses').upsert({ loan_id: loan.id, installment_index: i, status, updated_at: new Date().toISOString() });
+            }
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        };
+        upsert();
+      });
+
+      // 2. Update paid_amount in loans table based on status change
+      await new Promise<void>((resolve, reject) => {
+        const updatePaidAmount = async () => {
+          try {
+            // Get current loan data
+            const { data: loanData, error: loanErr } = await supabase
+              .from('loans')
+              .select('paid_amount')
+              .eq('id', loan.id)
+              .single();
+            if (loanErr || !loanData) {
+              resolve(); // Continue even if this fails
+              return;
+            }
+
+            const currentPaidAmount = Number(loanData.paid_amount || 0);
+            const emiAmount = computedEmi;
+            let newPaidAmount = currentPaidAmount;
+
+            const isOldPaid = oldStatus === 'Paid' || oldStatus === 'ECS Success';
+            const isNewPaid = status === 'Paid' || status === 'ECS Success';
+
+            // Adjust paid amount based on status change
+            if (isNewPaid && !isOldPaid) {
+              // EMI changed from unpaid to paid - add EMI amount
+              newPaidAmount += emiAmount;
+            } else if (!isNewPaid && isOldPaid) {
+              // EMI changed from paid to unpaid - subtract EMI amount
+              newPaidAmount -= emiAmount;
+            }
+            // If status changed within paid statuses (Paid <-> ECS Success), no amount change needed
+
+            // Update the paid_amount in loans table
+            await supabase.from('loans').update({ paid_amount: newPaidAmount }).eq('id', loan.id);
+            newPaidAmountComputed = newPaidAmount;
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        };
+        updatePaidAmount();
+      });
+
+      // 3. Update overall loan status based on EMI statuses
+      await new Promise<void>((resolve, reject) => {
+        const updateLoanStatus = async () => {
+          try {
+            const { data: allStatuses, error: fetchError } = await supabase
+              .from('emi_statuses')
+              .select('status')
+              .eq('loan_id', loan.id);
+            if (fetchError || !allStatuses) {
+              resolve(); // Continue even if this fails
+              return;
+            }
+
+            const statuses = allStatuses.map(s => s.status);
+            const paidCount = statuses.filter(s => s === 'Paid').length;
+            const ecsSuccessCount = statuses.filter(s => s === 'ECS Success').length;
+            const bounceCount = statuses.filter(s => s === 'ECS Bounce').length;
+            const overdueCount = statuses.filter(s => s === 'Due Missed').length;
+
+            let newLoanStatus = 'ontrack';
+
+            // Check for bounce status first (highest priority)
+            if (bounceCount > 0) {
+              newLoanStatus = 'bounce';
+            }
+            // Check for overdue status (second highest priority)
+            else if (overdueCount > 0) {
+              newLoanStatus = 'overdue';
+            }
+            // Check if all installments are ECS Success
+            else if (ecsSuccessCount === loan.tenure) {
+              newLoanStatus = 'ecs_success';
+            }
+            // Check if all installments are Paid
+            else if (paidCount === loan.tenure) {
+              newLoanStatus = 'paid';
+            }
+            // Check if we have a mix of Paid and ECS Success
+            else if (paidCount + ecsSuccessCount === loan.tenure) {
+              newLoanStatus = 'paid';
+            }
+            // Default to ontrack if we have some payments but not all
+            else if (paidCount + ecsSuccessCount > 0) {
+              newLoanStatus = 'ontrack';
+            }
+
+            // Update loans table
+            await supabase.from('loans').update({ status: newLoanStatus }).eq('id', loan.id);
+            newLoanStatusComputed = newLoanStatus as any;
+            paymentsCompletedComputed = paidCount + ecsSuccessCount;
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        };
+        updateLoanStatus();
+      });
+
+      // 4. Insert audit record for this change
       try {
-        const { error } = await supabase.from('emi_statuses').upsert(
-          [{ loan_id: loan.id, installment_index: i, status, updated_at: new Date().toISOString() }],
-          { onConflict: 'loan_id,installment_index' } as any
-        );
-        if (error) {
-          // If upsert with onConflict not supported, try plain upsert without option
-          await supabase.from('emi_statuses').upsert({ loan_id: loan.id, installment_index: i, status, updated_at: new Date().toISOString() });
-        }
-      } catch {
-        // silently ignore
+        const emiAmount = computedEmi;
+        const isOldPaid = oldStatus === 'Paid' || oldStatus === 'ECS Success';
+        const isNewPaid = status === 'Paid' || status === 'ECS Success';
+        let amountAffected = 0;
+        if (isNewPaid && !isOldPaid) amountAffected = emiAmount; // payment recognized
+        else if (!isNewPaid && isOldPaid) amountAffected = -emiAmount; // payment reversed
+
+        const dueInfo = schedule[i];
+        const note = dueInfo
+          ? `Month: ${dueInfo.monthLabel}, Due: ${dueInfo.dueDate.toLocaleDateString('en-IN')}, EMI: ${emiAmount}`
+          : `EMI: ${emiAmount}`;
+
+        await supabase.from('emi_status_audit').insert({
+          loan_id: loan.id,
+          installment_index: i,
+          old_status: oldStatus,
+          new_status: status,
+          changed_by: profile?.id || null,
+          amount_affected: amountAffected,
+          notes: note,
+        });
+      } catch (err) {
+        // Non-blocking: don't fail UX if audit insert fails
+        console.warn('emi_status_audit insert failed', err);
       }
-    };
-    upsert();
 
-    // Update overall loan status based on EMI statuses
-    const updateLoanStatus = async () => {
-      try {
-        const { data: allStatuses, error: fetchError } = await supabase
-          .from('emi_statuses')
-          .select('status')
-          .eq('loan_id', loan.id);
-        if (fetchError || !allStatuses) return;
+      // 5. Log the audit trail (optional - doesn't affect core functionality)
+      console.log(`EMI Status Change: Loan ${loan.id}, Installment ${i}, From ${oldStatus} to ${status} at ${new Date().toISOString()}`);
 
-        const statuses = allStatuses.map(s => s.status);
-        const allPaidOrSuccess = statuses.every(s => s === 'Paid' || s === 'ECS Success');
-        const hasBounce = statuses.some(s => s === 'ECS Bounce');
-        const hasMissed = statuses.some(s => s === 'Due Missed');
+      // All database operations completed successfully
+      console.log('✅ EMI status change saved successfully to database');
 
-        let newLoanStatus = 'ontrack'; // default
-        if (allPaidOrSuccess) {
-          newLoanStatus = 'paid';
-        } else if (hasBounce || hasMissed) {
-          newLoanStatus = 'overdue';
-        } else if (statuses.some(s => s === 'Paid' || s === 'ECS Success')) {
-          newLoanStatus = 'ontrack';
-        }
-
-        // Update loans table
-        await supabase.from('loans').update({ status: newLoanStatus }).eq('id', loan.id);
-      } catch {
-        // silently ignore
+      // 6. Notify parent to update UI immediately
+      if (onUpdated && newPaidAmountComputed !== null && newLoanStatusComputed) {
+        onUpdated({
+          loanId: loan.id,
+          paidAmount: newPaidAmountComputed,
+          paymentsCompleted: paymentsCompletedComputed || 0,
+          status: newLoanStatusComputed,
+        });
       }
-    };
-    updateLoanStatus();
+
+    } catch (error) {
+      console.error('❌ Error saving EMI status change:', error);
+      // Revert UI change on error
+      setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, status: status } : r)));
+    }
   };
 
   return (
@@ -179,7 +337,16 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly = false }:
     >
       <div className="mt-10 w-full max-w-3xl bg-gray-900 text-gray-100 rounded-xl shadow-2xl border border-gray-700 overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 bg-gray-800 border-b border-gray-700">
-          <h3 className="text-lg font-semibold">Loan {loan.id} — {loan.fullName}</h3>
+          <div className="flex items-center gap-3">
+            <h3 className="text-lg font-semibold">
+              {loan.applicationNumber ? `App: ${loan.applicationNumber}` : `Loan ${loan.id}`} — {loan.fullName}
+            </h3>
+            {!isAdmin && (
+              <span className="px-2 py-1 text-xs font-medium bg-yellow-900/40 text-yellow-300 border border-yellow-800 rounded-full">
+                Read Only
+              </span>
+            )}
+          </div>
           <button onClick={onClose} className="p-2 rounded hover:bg-gray-700">
             <X className="w-5 h-5" />
           </button>
@@ -234,7 +401,10 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly = false }:
                       <td className="px-6 py-4">
                         <select
                           value={r.status}
-                          onChange={(e) => setRowStatus(i, e.target.value as PaymentRow['status'])}
+                          onChange={async (e) => {
+                            const newStatus = e.target.value as PaymentRow['status'];
+                            await setRowStatus(i, newStatus);
+                          }}
                           className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm"
                         >
                           <option>Pending</option>
