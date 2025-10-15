@@ -13,6 +13,7 @@ import {
   Filter
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import PaymentDetailsModal from './PaymentDetailsModal';
 
 interface LoanApplication {
   id: string;
@@ -26,7 +27,7 @@ interface LoanApplication {
   paidAmount: number;
   remainingAmount: number;
   nextDueDate: string;
-  status: 'current' | 'overdue' | 'paid' | 'default';
+  status: 'ontrack' | 'overdue' | 'paid' | 'default';
   paymentsCompleted: number;
   totalPayments: number;
   mobileNumber: string;
@@ -40,8 +41,9 @@ const PaymentTracker: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const tableRef = useRef<HTMLDivElement | null>(null);
+  const [selectedLoan, setSelectedLoan] = useState<LoanApplication | null>(null);
 
-  const applyFilterAndScroll = (status: 'current' | 'overdue' | 'paid') => {
+  const applyFilterAndScroll = (status: 'ontrack' | 'overdue' | 'paid') => {
     setFilterStatus(status);
     // Wait for React state to apply filter and render, then scroll
     setTimeout(() => {
@@ -60,7 +62,46 @@ const PaymentTracker: React.FC = () => {
           .eq('status', 'Loan Disbursed')
           .order('disbursed_at', { ascending: false });
         if (error) throw error;
-        const rows = (data || []).map((l: any) => {
+        const loanRows = data || [];
+        // try to fetch latest disbursement_date for these loans to drive schedule
+        let byId: Record<string, string> = {};
+        if (loanRows.length > 0) {
+          const ids = loanRows.map((l: any) => l.id);
+          const { data: disb, error: dErr } = await supabase
+            .from('loan_disbursements')
+            .select('loan_id, disbursement_date')
+            .in('loan_id', ids);
+          if (!dErr && disb) {
+            // keep latest per loan
+            const map: Record<string, string> = {};
+            for (const row of disb as any[]) {
+              const prev = map[row.loan_id];
+              const cur = row.disbursement_date;
+              if (!prev || new Date(cur).getTime() > new Date(prev).getTime()) {
+                map[row.loan_id] = cur;
+              }
+            }
+            byId = map;
+          }
+        }
+        // Fetch EMI statuses for status calculation
+        let emiStatuses: Record<string, string[]> = {};
+        if (loanRows.length > 0) {
+          const ids = loanRows.map((l: any) => l.id);
+          const { data: emi, error: eErr } = await supabase
+            .from('emi_statuses')
+            .select('loan_id, installment_index, status')
+            .in('loan_id', ids);
+          if (!eErr && emi) {
+            const map: Record<string, string[]> = {};
+            for (const row of emi as any[]) {
+              if (!map[row.loan_id]) map[row.loan_id] = [];
+              map[row.loan_id][row.installment_index] = row.status;
+            }
+            emiStatuses = map;
+          }
+        }
+        const rows = loanRows.map((l: any) => {
           const fullName = `${l.first_name ?? ''} ${l.last_name ?? ''}`.trim();
           const loanAmount = Number(l.amount_disbursed ?? l.loan_amount ?? 0);
           const tenure = Number(l.tenure ?? 0);
@@ -68,21 +109,35 @@ const PaymentTracker: React.FC = () => {
           const totalPayable = Number(l.total_payable ?? loanAmount); 
           const paidAmount = Number(l.paid_amount ?? 0);
           const remainingAmount = Math.max(totalPayable - paidAmount, 0);
-          const status: LoanApplication['status'] = remainingAmount === 0 ? 'paid' : 'current';
+
+          // Determine loan status based on EMI statuses
+          const statuses = emiStatuses[l.id] || [];
+          const paidEmiCount = statuses.filter(s => s === 'Paid' || s === 'ECS Success').length;
+          const hasBounce = statuses.some(s => s === 'ECS Bounce');
+          const hasMissed = statuses.some(s => s === 'Due Missed');
+          let status: LoanApplication['status'] = 'ontrack';
+          if (paidEmiCount === tenure) {
+            status = 'paid';
+          } else if (hasBounce || hasMissed) {
+            status = 'overdue';
+          } else if (paidEmiCount > 0) {
+            status = 'ontrack';
+          }
+
           return {
             id: l.id,
             fullName,
             loanAmount,
             tenure,
             interestScheme: String(l.interest_scheme ?? ''),
-            disbursedDate: l.disbursement_date ?? l.disbursed_at ?? l.created_at,
+            disbursedDate: byId[l.id] ?? l.disbursement_date ?? l.disbursed_at ?? l.created_at,
             emiAmount,
             totalPayable,
             paidAmount,
             remainingAmount,
             nextDueDate: '-',
             status,
-            paymentsCompleted: paidAmount > 0 && emiAmount > 0 ? Math.floor(paidAmount / emiAmount) : 0,
+            paymentsCompleted: paidEmiCount,
             totalPayments: tenure,
             mobileNumber: l.mobile_primary ?? '-',
             introducedBy: l.introduced_by ?? '-',
@@ -233,27 +288,27 @@ const PaymentTracker: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
               <div
                 className="border border-slate-200 dark:border-gray-700 rounded-lg p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-gray-700/40 transition-colors"
-                onClick={() => applyFilterAndScroll('current')}
+                onClick={() => applyFilterAndScroll('ontrack')}
                 role="button"
-                aria-label="Filter Current and scroll to table"
+                aria-label="Filter On Track and scroll to table"
               >
                 <div className="flex items-center gap-3 mb-3">
                   <div className="bg-green-100 p-2 rounded-lg">
                     <CheckCircle className="w-5 h-5 text-green-600" />
                   </div>
-                  <span className="font-semibold text-slate-700 dark:text-gray-200">Current</span>
+                  <span className="font-semibold text-slate-700 dark:text-gray-200">On Track</span>
                 </div>
                 <p className="text-2xl font-bold text-slate-800 dark:text-white">
-                  {loans.filter(l => l.status === 'current').length}
+                  {loans.filter(l => l.status === 'ontrack').length}
                 </p>
                 <p className="text-sm text-slate-600 dark:text-gray-300 mt-1">Loans on track</p>
               </div>
 
               <div
                 className="border border-slate-200 dark:border-gray-700 rounded-lg p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-gray-700/40 transition-colors"
-                onClick={() => applyFilterAndScroll('overdue')}
+                onClick={() => applyFilterAndScroll('ontrack')}
                 role="button"
-                aria-label="Filter Overdue and scroll to table"
+                aria-label="Filter On Track and scroll to table"
               >
                 <div className="flex items-center gap-3 mb-3">
                   <div className="bg-red-100 p-2 rounded-lg">
@@ -310,7 +365,7 @@ const PaymentTracker: React.FC = () => {
                   className="pl-10 pr-8 py-3 border border-slate-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none appearance-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white cursor-pointer"
                 >
                   <option value="all">All Status</option>
-                  <option value="current">Current</option>
+                  <option value="ontrack">On Track</option>
                   <option value="overdue">Overdue</option>
                   <option value="paid">Paid</option>
                 </select>
@@ -329,24 +384,24 @@ const PaymentTracker: React.FC = () => {
             <table className="w-full">
               <thead className="bg-slate-50 dark:bg-gray-700 border-b border-slate-200 dark:border-gray-700">
                 <tr>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Name</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Loan ID</th>
-                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Borrower</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Loan Amount</th>
-                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Progress</th>
-                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Paid / Total</th>
-                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Next Due</th>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Tenure</th>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Paid EMI</th>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Remaining</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Status</th>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Progress</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-gray-700">
                 {filteredLoans.map((loan) => {
-                  const progress = (loan.paymentsCompleted / loan.totalPayments) * 100;
+                  const paidEmi = loan.paymentsCompleted;
+                  const remainingEmi = Math.max(loan.totalPayments - paidEmi, 0);
+                  const progress = loan.totalPayments > 0 ? (paidEmi / loan.totalPayments) * 100 : 0;
                   return (
                     <tr key={loan.id} className="hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-colors">
-                      <td className="py-4 px-6">
-                        <span className="font-semibold text-slate-800 dark:text-white">{loan.id}</span>
-                      </td>
                       <td className="py-4 px-6">
                         <div>
                           <p className="font-medium text-slate-800 dark:text-white">{loan.fullName}</p>
@@ -354,38 +409,19 @@ const PaymentTracker: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-4 px-6">
-                        <div>
-                          <p className="font-semibold text-slate-800 dark:text-white">₹{loan.loanAmount.toLocaleString()}</p>
-                          <p className="text-xs text-slate-500 dark:text-gray-300">{loan.tenure} months • {loan.interestScheme}</p>
-                        </div>
+                        <span className="font-semibold text-slate-800 dark:text-white">{loan.id}</span>
                       </td>
                       <td className="py-4 px-6">
-                        <div className="w-32">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs font-medium text-slate-600 dark:text-gray-300">{progress.toFixed(0)}%</span>
-                          </div>
-                          <div className="w-full bg-slate-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                            <div
-                              className={`h-2 rounded-full transition-all ${
-                                loan.status === 'paid' ? 'bg-blue-500' :
-                                loan.status === 'overdue' ? 'bg-red-500' : 'bg-green-500'
-                              }`}
-                              style={{ width: `${progress}%` }}
-                            />
-                          </div>
-                        </div>
+                        <span className="font-semibold text-slate-800 dark:text-white">₹{loan.loanAmount.toLocaleString('en-IN')}</span>
                       </td>
                       <td className="py-4 px-6">
-                        <div>
-                          <p className="font-semibold text-slate-800 dark:text-white">₹{loan.paidAmount.toLocaleString()}</p>
-                          <p className="text-xs text-slate-500 dark:text-gray-300">of ₹{loan.totalPayable.toLocaleString()}</p>
-                        </div>
+                        <span className="text-sm text-slate-700 dark:text-gray-200">{loan.tenure} months</span>
                       </td>
                       <td className="py-4 px-6">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4 text-slate-400" />
-                          <span className="text-sm text-slate-700 dark:text-gray-200">{loan.nextDueDate}</span>
-                        </div>
+                        <span className="font-medium text-slate-800 dark:text-white">{paidEmi}</span>
+                      </td>
+                      <td className="py-4 px-6">
+                        <span className="font-medium text-slate-800 dark:text-white">{remainingEmi}</span>
                       </td>
                       <td className="py-4 px-6">
                         <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${getStatusColor(loan.status)}`}>
@@ -394,8 +430,24 @@ const PaymentTracker: React.FC = () => {
                         </span>
                       </td>
                       <td className="py-4 px-6">
-                        <button className="text-blue-600 hover:text-blue-700 font-medium text-sm hover:underline">
-                          View Details
+                        <div className="w-32">
+                          <div className="w-full bg-slate-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                            <div
+                              className={`h-2 rounded-full transition-all ${
+                                loan.status === 'paid' ? 'bg-green-500' :
+                                loan.status === 'overdue' ? 'bg-yellow-500' : 'bg-blue-500'
+                              }`}
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6">
+                        <button
+                          className="px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                          onClick={() => setSelectedLoan(loan)}
+                        >
+                          View
                         </button>
                       </td>
                     </tr>
@@ -447,7 +499,24 @@ const PaymentTracker: React.FC = () => {
     );
   }
 
-  return content;
+  return (
+    <>
+      {content}
+      {selectedLoan && (
+        <PaymentDetailsModal
+          loan={{
+            id: selectedLoan.id,
+            fullName: selectedLoan.fullName,
+            loanAmount: selectedLoan.loanAmount,
+            tenure: selectedLoan.tenure,
+            emiAmount: selectedLoan.emiAmount,
+            disbursedDate: selectedLoan.disbursedDate
+          }}
+          onClose={() => setSelectedLoan(null)}
+        />
+      )}
+    </>
+  );
 };
 
 export default PaymentTracker;
