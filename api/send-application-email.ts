@@ -69,12 +69,23 @@ export default async function handler(req: any, res: any) {
 
     const html = buildHtml({ applicant, loan, references, documents, loanId, applicationNumber });
 
+    // Temporary visibility logs for verification
+    // Remove these logs once you've confirmed emails are flowing
+    console.log('Sending application email', {
+      to,
+      subject: subject || 'Loan Application Submitted',
+      loanId,
+      applicationNumber,
+    });
+
     const send = await resend.emails.send({
       from: 'no-reply@yourdomain.com',
-      to,
+      to: to as any, // string or string[] supported by Resend
       subject: subject || 'Loan Application Submitted',
       html,
     });
+
+    console.log('Email sent', { to, id: (send as any)?.id });
 
     return res.status(200).json({ ok: true, id: (send as any)?.id });
   } catch (e: any) {

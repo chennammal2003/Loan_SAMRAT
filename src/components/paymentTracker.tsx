@@ -292,7 +292,7 @@ const PaymentTracker: React.FC = () => {
       return v;
     }).join(',')).join('\n');
 
-  const asText = (v: string | number) => `="${String(v).replace(/"/g,'\"')}"`;
+  // (removed asText helper; not needed in current flat export)
 
   const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
@@ -333,33 +333,26 @@ const PaymentTracker: React.FC = () => {
 
       if (type === 'excel') {
         const rows: (string | number)[][] = [];
-        rows.push(['Payment Tracker Export']);
-        rows.push(['Generated at', now.toLocaleString('en-IN')]);
-        rows.push([]);
-        rows.push(summaryHeader);
-        // Use plain numbers for amounts, force text for identifiers
-        for (const l of filteredLoans) {
-          rows.push([
-            l.fullName,
-            asText(l.id),
-            Number(l.loanAmount || 0),
-            Number(l.tenure || 0),
-            Number(l.paymentsCompleted || 0),
-            Number(l.paidAmount || 0),
-            Number(l.remainingAmount || 0),
-            l.status,
-          ]);
-        }
-        rows.push([]);
-        rows.push(['Per-loan Schedule (excluding Due Date)']);
+        // For each person, output one table: header + their rows
         for (const block of allDetailRows) {
-          rows.push([]);
-          rows.push(['Loan', asText(block.loan.id)]);
-          rows.push(['Name', block.loan.fullName]);
-          rows.push(['Month', 'Amount', 'Status']);
+          const l = block.loan;
+          // Header for this person
+          rows.push(['Name', 'Loan Amount', 'Tenure', 'Month', 'Amount', 'Status', 'Collected', 'Remaining']);
+          // Person rows
           for (const r of block.rows) {
-            rows.push([r.monthLabel, Number(r.amount || 0), r.status]);
+            rows.push([
+              l.fullName,
+              Number(l.loanAmount || 0),
+              Number(l.tenure || 0),
+              r.monthLabel,
+              Number(r.amount || 0),
+              r.status,
+              Number(l.paidAmount || 0),
+              Number(l.remainingAmount || 0),
+            ]);
           }
+          // Blank line between people for readability
+          rows.push([]);
         }
         const blob = new Blob([toCsv(rows)], { type: 'text/csv;charset=utf-8;' });
         downloadBlob(blob, `payment-tracker-${ts}.csv`);
