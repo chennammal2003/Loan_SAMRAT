@@ -39,6 +39,8 @@ const PaymentTracker: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const tableRef = useRef<HTMLDivElement | null>(null);
   const [selectedLoan, setSelectedLoan] = useState<LoanApplication | null>(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exporting, setExporting] = useState<null | 'pdf' | 'excel'>(null);
 
   // Removed applyFilterAndScroll (no longer needed after UI simplification)
 
@@ -223,6 +225,186 @@ const PaymentTracker: React.FC = () => {
     }
   };
 
+  const computeEmi = (loanAmount: number, tenure: number) => {
+    const r = 0.36 / 12;
+    if (!loanAmount || !tenure) return 0;
+    const pow = Math.pow(1 + r, tenure);
+    return Math.round((loanAmount * r * pow) / (pow - 1));
+  };
+
+  const buildSchedule = (disbursedDate: string, tenure: number) => {
+    const result: { monthLabel: string; dueDate: Date }[] = [];
+    const start = disbursedDate ? new Date(disbursedDate) : new Date();
+    const dueDay = start.getDate();
+    const base = new Date(start.getFullYear(), start.getMonth(), dueDay);
+    for (let i = 0; i < tenure; i++) {
+      const y = base.getFullYear();
+      const m = base.getMonth() + i + 1;
+      const lastDay = new Date(y, m + 1, 0).getDate();
+      const day = Math.min(dueDay, lastDay);
+      const d = new Date(y, m, day);
+      result.push({ monthLabel: d.toLocaleString('en-US', { month: 'short' }), dueDate: d });
+    }
+    return result;
+  };
+
+  const fetchPopupRowsForLoan = async (loan: LoanApplication) => {
+    const emi = computeEmi(loan.loanAmount, loan.tenure);
+    const schedule = buildSchedule(loan.disbursedDate, loan.tenure);
+    const { data, error } = await supabase
+      .from('payments')
+      .select('payment_date,total_paid')
+      .eq('loan_id', loan.id)
+      .order('payment_date', { ascending: true });
+    if (error) return schedule.map(() => ({ monthLabel: '-', amount: emi, status: 'Pending' }));
+    const payments = (data || []).map((p: any) => ({ date: new Date(p.payment_date), amount: Number(p.total_paid ?? 0) }));
+    const computed = schedule.map((slot) => {
+      const endOfMonth = new Date(slot.dueDate.getFullYear(), slot.dueDate.getMonth() + 1, 0, 23, 59, 59);
+      const paidThisCutoff = payments.filter((p) => p.date.getTime() <= endOfMonth.getTime()).reduce((s, p) => s + p.amount, 0);
+      const emisCovered = Math.floor(paidThisCutoff / Math.max(emi, 1));
+      const index = schedule.indexOf(slot);
+      const covered = emisCovered > index;
+      const status = covered ? 'Paid' : 'Pending';
+      return { monthLabel: slot.monthLabel, amount: emi, status };
+    });
+    try {
+      const { data: saved, error: sErr } = await supabase
+        .from('emi_statuses')
+        .select('installment_index,status')
+        .eq('loan_id', loan.id)
+        .order('installment_index');
+      if (!sErr && saved && saved.length > 0) {
+        return computed.map((r, i) => {
+          const row = (saved as any[]).find((s) => Number(s.installment_index) === i);
+          return row ? { ...r, status: row.status as any } : r;
+        });
+      }
+      return computed;
+    } catch {
+      return computed;
+    }
+  };
+
+  const toCsv = (rows: (string | number)[][]) => rows
+    .map(r => r.map((c) => {
+      const v = c === null || c === undefined ? '' : String(c);
+      if (/[",\n]/.test(v)) return '"' + v.replace(/"/g, '""') + '"';
+      return v;
+    }).join(',')).join('\n');
+
+  const asText = (v: string | number) => `="${String(v).replace(/"/g,'\"')}"`;
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExport = async (type: 'pdf' | 'excel') => {
+    setExporting(type);
+    setShowExportMenu(false);
+    try {
+      const now = new Date();
+      const ts = now.toISOString().replace(/[:T]/g, '-').split('.')[0];
+      // Summary section
+      const summaryHeader = ['Name', 'Loan ID', 'Loan Amount', 'Tenure (months)', 'Paid EMI', 'Collected', 'Remaining Amount', 'Status'];
+      const summaryRows = filteredLoans.map(l => [
+        l.fullName,
+        l.id,
+        `₹${l.loanAmount.toLocaleString('en-IN')}`,
+        String(l.tenure),
+        String(l.paymentsCompleted),
+        `₹${l.paidAmount.toLocaleString('en-IN')}`,
+        `₹${l.remainingAmount.toLocaleString('en-IN')}`,
+        l.status
+      ]);
+
+      // Details (popup-like) section: exclude Due Date
+      const allDetailRows: { loan: LoanApplication; rows: { monthLabel: string; amount: number; status: string }[] }[] = [];
+      for (const l of filteredLoans) {
+        const rows = await fetchPopupRowsForLoan(l);
+        allDetailRows.push({ loan: l, rows });
+      }
+
+      if (type === 'excel') {
+        const rows: (string | number)[][] = [];
+        rows.push(['Payment Tracker Export']);
+        rows.push(['Generated at', now.toLocaleString('en-IN')]);
+        rows.push([]);
+        rows.push(summaryHeader);
+        // Use plain numbers for amounts, force text for identifiers
+        for (const l of filteredLoans) {
+          rows.push([
+            l.fullName,
+            asText(l.id),
+            Number(l.loanAmount || 0),
+            Number(l.tenure || 0),
+            Number(l.paymentsCompleted || 0),
+            Number(l.paidAmount || 0),
+            Number(l.remainingAmount || 0),
+            l.status,
+          ]);
+        }
+        rows.push([]);
+        rows.push(['Per-loan Schedule (excluding Due Date)']);
+        for (const block of allDetailRows) {
+          rows.push([]);
+          rows.push(['Loan', asText(block.loan.id)]);
+          rows.push(['Name', block.loan.fullName]);
+          rows.push(['Month', 'Amount', 'Status']);
+          for (const r of block.rows) {
+            rows.push([r.monthLabel, Number(r.amount || 0), r.status]);
+          }
+        }
+        const blob = new Blob([toCsv(rows)], { type: 'text/csv;charset=utf-8;' });
+        downloadBlob(blob, `payment-tracker-${ts}.csv`);
+      } else {
+        const w = window.open('', '_blank');
+        if (!w) return;
+        const style = `
+          <style>
+            body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; padding: 24px; color: #111; }
+            h1 { margin: 0 0 8px 0; }
+            .muted { color: #555; margin-bottom: 16px; }
+            table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+            th, td { border: 1px solid #ccc; padding: 8px; font-size: 12px; text-align: left; }
+            th { background:#f5f5f5; }
+            .section { margin-top: 20px; }
+          </style>`;
+        const header = `<h1>Payment Tracker Export</h1><div class="muted">Generated at ${now.toLocaleString('en-IN')}</div>`;
+        const summaryTable = `
+          <table>
+            <thead><tr>${summaryHeader.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+            <tbody>
+              ${summaryRows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}
+            </tbody>
+          </table>`;
+        const detailsHtml = allDetailRows.map(block => `
+          <div class="section">
+            <div><strong>Loan:</strong> ${block.loan.id} &nbsp; <strong>Name:</strong> ${block.loan.fullName}</div>
+            <table>
+              <thead><tr><th>Month</th><th>Amount</th><th>Status</th></tr></thead>
+              <tbody>
+              ${block.rows.map(r => `<tr><td>${r.monthLabel}</td><td>₹${r.amount.toLocaleString('en-IN')}</td><td>${r.status}</td></tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        `).join('');
+        w.document.write(`<html><head><title>Payment Tracker</title>${style}</head><body>${header}${summaryTable}${detailsHtml}</body></html>`);
+        w.document.close();
+        w.focus();
+        w.print();
+      }
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const content = (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-gray-900 dark:to-gray-950 p-6">
       <div className="max-w-7xl mx-auto">
@@ -268,10 +450,32 @@ const PaymentTracker: React.FC = () => {
                   <option value="ecs_success">ECS Success</option>
                 </select>
               </div>
-              <button className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 font-medium">
-                <Download className="w-5 h-5" />
-                Export
-              </button>
+              <div className="relative">
+                <button
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 font-medium"
+                  onClick={() => setShowExportMenu((v) => !v)}
+                  disabled={exporting !== null}
+                >
+                  <Download className="w-5 h-5" />
+                  {exporting ? (exporting === 'excel' ? 'Exporting CSV...' : 'Preparing PDF...') : 'Export'}
+                </button>
+                {showExportMenu && (
+                  <div className="absolute right-0 mt-2 w-44 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-lg shadow-lg z-10">
+                    <button
+                      className="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-gray-600"
+                      onClick={() => handleExport('excel')}
+                    >
+                      Excel (CSV)
+                    </button>
+                    <button
+                      className="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-gray-600"
+                      onClick={() => handleExport('pdf')}
+                    >
+                      PDF
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
