@@ -236,6 +236,41 @@ export default function PublicApplyLoanPage() {
         },
       });
       if (error) throw error;
+      // Email webhook (non-blocking): submission confirmation
+      try {
+        const emailWebhook = import.meta.env.VITE_EMAIL_WEBHOOK_URL as string | undefined;
+        if (emailWebhook) {
+          const payload = {
+            to: formData.emailId,
+            stage: 'submitted',
+            applicant: {
+              firstName: formData.firstName,
+              lastName: formData.lastName,
+              email: formData.emailId,
+              mobile: formData.mobilePrimary,
+              address: formData.address,
+              pinCode: formData.pinCode,
+            },
+            loan: {
+              amount: parseFloat(formData.loanAmount),
+              tenure: parseInt(formData.tenure),
+              interestScheme: formData.interestScheme,
+              processingFee: formData.processingFee,
+              goldPriceLockDate: formData.goldPriceLockDate,
+            },
+            references: [
+              { name: formData.reference1Name, contact: formData.reference1Contact, relationship: formData.reference1Relationship },
+              { name: formData.reference2Name, contact: formData.reference2Contact, relationship: formData.reference2Relationship },
+            ],
+            documents: [],
+          };
+          fetch(emailWebhook, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          }).catch(() => {});
+        }
+      } catch {}
       setToast({
         type: 'success',
         message:

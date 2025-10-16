@@ -11,6 +11,7 @@ export type TrackerLoan = {
   tenure: number; // in months
   emiAmount: number;
   disbursedDate: string;
+  createdAt?: string;
 };
 
 type PaymentRow = {
@@ -341,6 +342,11 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadO
             <h3 className="text-lg font-semibold">
               {loan.applicationNumber ? `App: ${loan.applicationNumber}` : `Loan ${loan.id}`} — {loan.fullName}
             </h3>
+            {loan.createdAt && (
+              <div className="text-xs text-gray-300">
+                Applied On: {new Date(loan.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: '2-digit' })}
+              </div>
+            )}
             {!isAdmin && (
               <span className="px-2 py-1 text-xs font-medium bg-yellow-900/40 text-yellow-300 border border-yellow-800 rounded-full">
                 Read Only

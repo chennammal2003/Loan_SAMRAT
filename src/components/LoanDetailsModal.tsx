@@ -241,6 +241,7 @@ export default function LoanDetailsModal({ loan, onClose, showActions, onAccept,
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Loan Application Details</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Application ID: {loan.application_number || loan.id.substring(0, 8)}
+              <span className="ml-3">| Applied On: {new Date(loan.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: '2-digit' })}</span>
             </p>
           </div>
           <button
@@ -453,23 +454,27 @@ export default function LoanDetailsModal({ loan, onClose, showActions, onAccept,
           </div>
         )}
 
-        {/* Admin actions after acceptance */}
+        {/* Admin actions sequence: show only when eligible */}
         {isAdmin && (
           <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
-            <button
-              onClick={() => setOpenVerify(true)}
-              disabled={!(loanDocsAlreadyUploaded) || localStatus !== 'Accepted'}
-              className={`px-4 py-2 rounded text-white ${ (loanDocsAlreadyUploaded && localStatus==='Accepted') ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400 cursor-not-allowed'}`}
-            >
-              {localStatus === 'Verified' || localStatus === 'Loan Disbursed' ? 'Verified' : 'Verification'}
-            </button>
-            <button
-              onClick={() => setOpenDisburse(true)}
-              disabled={localStatus !== 'Verified'}
-              className={`px-4 py-2 rounded text-white ${ localStatus==='Verified' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-400 cursor-not-allowed'}`}
-            >
-              {localStatus === 'Loan Disbursed' ? 'Loan Disbursed' : 'Loan Disbursed'}
-            </button>
+            {/* Show Verification only when docs uploaded and status Accepted */}
+            {(loanDocsAlreadyUploaded && localStatus === 'Accepted') && (
+              <button
+                onClick={() => setOpenVerify(true)}
+                className="px-4 py-2 rounded text-white bg-blue-600 hover:bg-blue-700"
+              >
+                Verification
+              </button>
+            )}
+            {/* Show Loan Disbursed only after verification */}
+            {localStatus === 'Verified' && (
+              <button
+                onClick={() => setOpenDisburse(true)}
+                className="px-4 py-2 rounded text-white bg-purple-600 hover:bg-purple-700"
+              >
+                Loan Disbursed
+              </button>
+            )}
           </div>
         )}
 

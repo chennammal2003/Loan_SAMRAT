@@ -165,6 +165,7 @@ export default function LoanDetails({ initialStatusFilter = 'All' }: LoanDetails
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Address</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Loan Amount</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Tenure</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Applied On</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Status</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Actions</th>
               </tr>
@@ -181,8 +182,9 @@ export default function LoanDetails({ initialStatusFilter = 'All' }: LoanDetails
                   <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
                     ₹{loan.loan_amount.toLocaleString('en-IN')}
                   </td>
+                  <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">{loan.tenure} months</td>
                   <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
-                    {loan.tenure} months
+                    {new Date(loan.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: '2-digit' })}
                   </td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(loan.status)}`}>
@@ -202,7 +204,7 @@ export default function LoanDetails({ initialStatusFilter = 'All' }: LoanDetails
               ))}
               {filteredLoans.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-6 text-center text-sm text-gray-500 dark:text-gray-400">No results</td>
+                  <td colSpan={7} className="px-6 py-6 text-center text-sm text-gray-500 dark:text-gray-400">No results</td>
                 </tr>
               )}
             </tbody>

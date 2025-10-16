@@ -9,10 +9,12 @@ import {
   Filter
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import PaymentDetailsModal from './PaymentDetailsModal';
+import PaymentDetailsModal, { TrackerLoan } from './PaymentDetailsModal';
 
 interface LoanApplication {
   id: string;
+  applicationNumber: string;
+  createdAt: string;
   fullName: string;
   loanAmount: number;
   tenure: number;
@@ -148,6 +150,8 @@ const PaymentTracker: React.FC = () => {
 
           return {
             id: l.id,
+            applicationNumber: String(l.application_number || l.id),
+            createdAt: String(l.created_at || ''),
             fullName,
             loanAmount,
             tenure,
@@ -198,7 +202,7 @@ const PaymentTracker: React.FC = () => {
 
   const filteredLoans = loans.filter(loan => {
     const matchesSearch = loan.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         loan.id.toLowerCase().includes(searchTerm.toLowerCase());
+                         loan.applicationNumber.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = filterStatus === 'all' || loan.status === filterStatus;
     return matchesSearch && matchesFilter;
   });
@@ -312,10 +316,10 @@ const PaymentTracker: React.FC = () => {
       const now = new Date();
       const ts = now.toISOString().replace(/[:T]/g, '-').split('.')[0];
       // Summary section
-      const summaryHeader = ['Name', 'Loan ID', 'Loan Amount', 'Tenure (months)', 'Paid EMI', 'Collected', 'Remaining Amount', 'Status'];
+      const summaryHeader = ['Name', 'Application Number', 'Loan Amount', 'Tenure (months)', 'Paid EMI', 'Collected', 'Remaining Amount', 'Status'];
       const summaryRows = filteredLoans.map(l => [
         l.fullName,
-        l.id,
+        l.applicationNumber,
         `₹${l.loanAmount.toLocaleString('en-IN')}`,
         String(l.tenure),
         String(l.paymentsCompleted),
@@ -379,7 +383,7 @@ const PaymentTracker: React.FC = () => {
           </table>`;
         const detailsHtml = allDetailRows.map(block => `
           <div class="section">
-            <div><strong>Loan:</strong> ${block.loan.id} &nbsp; <strong>Name:</strong> ${block.loan.fullName}</div>
+            <div><strong>Application Number:</strong> ${block.loan.applicationNumber} &nbsp; <strong>Name:</strong> ${block.loan.fullName}</div>
             <table>
               <thead><tr><th>Month</th><th>Amount</th><th>Status</th></tr></thead>
               <tbody>
@@ -421,7 +425,7 @@ const PaymentTracker: React.FC = () => {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search by name or loan ID..."
+                placeholder="Search by name or application number..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 border border-slate-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
@@ -480,7 +484,7 @@ const PaymentTracker: React.FC = () => {
               <thead className="bg-slate-50 dark:bg-gray-700 border-b border-slate-200 dark:border-gray-700">
                 <tr>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Name</th>
-                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Loan ID</th>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Application Number</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Loan Amount</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Tenure</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Paid EMI</th>
@@ -504,7 +508,7 @@ const PaymentTracker: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-4 px-6">
-                        <span className="font-semibold text-slate-800 dark:text-white">{loan.id}</span>
+                        <span className="font-semibold text-slate-800 dark:text-white">{loan.applicationNumber}</span>
                       </td>
                       <td className="py-4 px-6">
                         <span className="font-semibold text-slate-800 dark:text-white">₹{loan.loanAmount.toLocaleString('en-IN')}</span>
@@ -604,12 +608,14 @@ const PaymentTracker: React.FC = () => {
         <PaymentDetailsModal
           loan={{
             id: selectedLoan.id,
+            applicationNumber: selectedLoan.applicationNumber,
             fullName: selectedLoan.fullName,
             loanAmount: selectedLoan.loanAmount,
             tenure: selectedLoan.tenure,
             emiAmount: selectedLoan.emiAmount,
-            disbursedDate: selectedLoan.disbursedDate
-          }}
+            disbursedDate: selectedLoan.disbursedDate,
+            createdAt: selectedLoan.createdAt
+          } as TrackerLoan}
           onClose={() => setSelectedLoan(null)}
           onUpdated={({ loanId, paidAmount, paymentsCompleted, status }) => {
             setLoans(prev => prev.map(l => l.id === loanId

@@ -263,6 +263,7 @@ export default function ManageLoans({ initialStatusFilter = 'All' }: ManageLoans
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Address</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Loan Amount</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Tenure</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Applied On</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Phone</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Status</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Documents</th>
@@ -281,8 +282,9 @@ export default function ManageLoans({ initialStatusFilter = 'All' }: ManageLoans
                   <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
                     ₹{loan.loan_amount.toLocaleString('en-IN')}
                   </td>
+                  <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">{loan.tenure} months</td>
                   <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
-                    {loan.tenure} months
+                    {new Date(loan.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: '2-digit' })}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
                     {loan.mobile_primary}
@@ -319,7 +321,7 @@ export default function ManageLoans({ initialStatusFilter = 'All' }: ManageLoans
               ))}
               {filteredLoans.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-6 text-center text-sm text-gray-500 dark:text-gray-400">No results</td>
+                  <td colSpan={9} className="px-6 py-6 text-center text-sm text-gray-500 dark:text-gray-400">No results</td>
                 </tr>
               )}
             </tbody>
