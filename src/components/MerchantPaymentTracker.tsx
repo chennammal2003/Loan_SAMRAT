@@ -319,7 +319,7 @@ export default function MerchantPaymentTracker() {
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Loan ID</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Loan Amount</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Tenure</th>
-                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Paid EMI</th>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Paid / Total EMI</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Remaining</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Status</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Progress</th>
@@ -352,7 +352,7 @@ export default function MerchantPaymentTracker() {
                         <span className="text-sm text-slate-700 dark:text-gray-200">{loan.tenure} months</span>
                       </td>
                       <td className="py-4 px-6">
-                        <span className="font-medium text-slate-800 dark:text-white">{paidEmi}</span>
+                        <span className="font-medium text-slate-800 dark:text-white">{paidEmi} / {loan.totalPayments}</span>
                       </td>
                       <td className="py-4 px-6">
                         <span className="font-medium text-slate-800 dark:text-white">{remainingEmi}</span>

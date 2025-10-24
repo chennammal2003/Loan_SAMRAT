@@ -64,6 +64,8 @@ export default function DocsModal({ loanId, fullName, onClose }: DocsModalProps)
       alert('Failed to download document');
     }
   };
+ 
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -98,7 +100,8 @@ export default function DocsModal({ loanId, fullName, onClose }: DocsModalProps)
             </div>
           )}
         </div>
-      </div>
+      </div> 
+      
     </div>
   );
 }

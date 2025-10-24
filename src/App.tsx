@@ -11,13 +11,13 @@ import AdminDashboard from './components/AdminDashboard';
 import LoanDetails from './components/LoanDetails';
 import MerchantDisbursedLoans from './components/MerchantDisbursedLoans';
 import MerchantPaymentTracker from './components/MerchantPaymentTracker';
-import ProductDescription from './components/ProductDescription';
 import ManageLoans from './components/ManageLoans';
 import AcceptedLoans from './components/AcceptedLoans';
 import DisbursedLoans from './components/DisbursedLoans';
 import MerchantDetails from './components/MerchantDetails';
 import MerchantDashboard from './components/MerchantDashboard';
 import PageShell from './components/PageShell';
+import Product from './components/products';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -111,7 +111,7 @@ function App() {
             <Route path="/loans" element={<MerchantRoute><PageShell><LoanDetails /></PageShell></MerchantRoute>} />
             <Route path="/disbursed" element={<MerchantRoute><PageShell><MerchantDisbursedLoans /></PageShell></MerchantRoute>} />
             <Route path="/payments" element={<MerchantRoute><PageShell><MerchantPaymentTracker /></PageShell></MerchantRoute>} />
-            <Route path="/products" element={<MerchantRoute><PageShell><ProductDescription /></PageShell></MerchantRoute>} />
+            <Route path="/products" element={<MerchantRoute><PageShell><Product /></PageShell></MerchantRoute>} />
             <Route
               path="/dashboard/*"
               element={

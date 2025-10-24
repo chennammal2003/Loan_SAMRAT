@@ -316,14 +316,14 @@ const PaymentTracker: React.FC = () => {
       const now = new Date();
       const ts = now.toISOString().replace(/[:T]/g, '-').split('.')[0];
       // Summary section
-      const summaryHeader = ['Name', 'Application Number', 'Loan Amount', 'Tenure (months)', 'Paid EMI', 'Collected', 'Remaining Amount', 'Status'];
+      const summaryHeader = ['Name', 'Application Number', 'Loan ID', 'Loan Amount', 'Tenure (months)', 'Paid/Total EMI', 'Remaining Amount', 'Status'];
       const summaryRows = filteredLoans.map(l => [
         l.fullName,
         l.applicationNumber,
+        l.id,
         `₹${l.loanAmount.toLocaleString('en-IN')}`,
         String(l.tenure),
-        String(l.paymentsCompleted),
-        `₹${l.paidAmount.toLocaleString('en-IN')}`,
+        `${l.paymentsCompleted} / ${l.totalPayments}`,
         `₹${l.remainingAmount.toLocaleString('en-IN')}`,
         l.status
       ]);
@@ -485,11 +485,11 @@ const PaymentTracker: React.FC = () => {
                 <tr>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Name</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Application Number</th>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Loan ID</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Loan Amount</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Tenure</th>
-                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Paid EMI</th>
-                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Collected</th>
-                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Remaining Amount</th>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Paid / Total EMI</th>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Remaining</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Status</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Progress</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Actions</th>
@@ -511,16 +511,16 @@ const PaymentTracker: React.FC = () => {
                         <span className="font-semibold text-slate-800 dark:text-white">{loan.applicationNumber}</span>
                       </td>
                       <td className="py-4 px-6">
+                        <span className="font-semibold text-slate-800 dark:text-white">{loan.id}</span>
+                      </td>
+                      <td className="py-4 px-6">
                         <span className="font-semibold text-slate-800 dark:text-white">₹{loan.loanAmount.toLocaleString('en-IN')}</span>
                       </td>
                       <td className="py-4 px-6">
                         <span className="text-sm text-slate-700 dark:text-gray-200">{loan.tenure} months</span>
                       </td>
                       <td className="py-4 px-6">
-                        <span className="font-medium text-slate-800 dark:text-white">{paidEmi}</span>
-                      </td>
-                      <td className="py-4 px-6">
-                        <span className="font-medium text-slate-800 dark:text-white">₹{loan.paidAmount.toLocaleString('en-IN')}</span>
+                        <span className="font-medium text-slate-800 dark:text-white">{paidEmi} / {loan.totalPayments}</span>
                       </td>
                       <td className="py-4 px-6">
                         <span className="font-medium text-slate-800 dark:text-white">₹{loan.remainingAmount.toLocaleString('en-IN')}</span>

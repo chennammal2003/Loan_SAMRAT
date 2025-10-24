@@ -7,7 +7,7 @@ import ApplyLoanModal from './ApplyLoanModal';
 import ShareLinkModal from './ShareLinkModal.tsx';
 import LoanDetails from './LoanDetails';
 import MerchantDisbursedLoans from './MerchantDisbursedLoans';
-import ProductDescription from './ProductDescription';
+import Product from './products';
 import MerchantProfilePanel from './MerchantProfilePanel';
 import DashboardStats from './DashboardStats';
 import MerchantProfileGate from './MerchantProfileGate';
@@ -128,7 +128,7 @@ export default function MerchantDashboard() {
             }`}
           >
             <Package className="w-5 h-5" />
-            <span>Product Description</span>
+            <span>Products</span>
           </button>
 
           {/* New: Profile item opens slide-over panel */}
@@ -170,7 +170,7 @@ export default function MerchantDashboard() {
               {activeTab === 'loans' && 'My Loan Applications'}
               {activeTab === 'disbursed' && 'My Disbursed Loans'}
               {activeTab === 'paymentTracker' && 'My Payment Tracker'}
-              {activeTab === 'products' && 'Product Information'}
+              {activeTab === 'products' && 'Products'}
             </h1>
             <button
               onClick={toggleTheme}
@@ -199,7 +199,7 @@ export default function MerchantDashboard() {
           )}
           {activeTab === 'products' && (
             <div className="space-y-6">
-              <ProductDescription />
+              <Product />
             </div>
           )}
         </div>
