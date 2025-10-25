@@ -28,8 +28,8 @@ export default function ProductCard({ product, onViewDetails }: ProductCardProps
   const wished = has(product.id);
 
   return (
-    <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 group" role="article" aria-label={product.name}>
-      <div className="relative overflow-hidden aspect-square bg-gradient-to-br from-amber-50 to-yellow-50">
+    <div className="bg-white dark:bg-gray-900 rounded-xl shadow-md overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 group" role="article" aria-label={product.name}>
+      <div className="relative overflow-hidden aspect-square bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-gray-800 dark:to-gray-800">
         {product.image_url ? (
           <img
             src={product.image_url}
@@ -55,7 +55,7 @@ export default function ProductCard({ product, onViewDetails }: ProductCardProps
           type="button"
           onClick={onViewDetails}
           aria-label={`View details of ${product.name}`}
-          className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm p-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-white hover:scale-110"
+          className="absolute top-3 left-3 bg-white/90 dark:bg-gray-800/80 backdrop-blur-sm p-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-white dark:hover:bg-gray-800 hover:scale-110"
         >
           <Eye className="w-5 h-5 text-amber-600" />
         </button>
@@ -71,7 +71,7 @@ export default function ProductCard({ product, onViewDetails }: ProductCardProps
 
       <div className="p-5 space-y-3">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="font-bold text-gray-800 text-lg line-clamp-2 flex-1">
+          <h3 className="font-bold text-gray-800 dark:text-gray-100 text-lg line-clamp-2 flex-1">
             {product.name}
           </h3>
           <span className="bg-amber-100 text-amber-700 px-2 py-1 rounded-md text-xs font-semibold whitespace-nowrap">
@@ -80,22 +80,22 @@ export default function ProductCard({ product, onViewDetails }: ProductCardProps
         </div>
 
         <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-500">Weight</span>
-          <span className="font-semibold text-gray-800">{product.weight}g</span>
+          <span className="text-gray-500 dark:text-gray-300">Weight</span>
+          <span className="font-semibold text-gray-800 dark:text-gray-100">{product.weight}g</span>
         </div>
 
         <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-500">Stock</span>
+          <span className="text-gray-500 dark:text-gray-300">Stock</span>
           <span className={`font-semibold ${isInStock ? 'text-green-600' : 'text-red-600'}`}>
             {isInStock ? `${product.stock_quantity} available` : 'Out of stock'}
           </span>
         </div>
 
-        <div className="pt-3 border-t border-gray-100">
+        <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
           {product.discount_percent > 0 ? (
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <span className="text-gray-400 text-sm line-through">
+                <span className="text-gray-400 dark:text-gray-500 text-sm line-through">
                   ₹{basePrice.toLocaleString()}
                 </span>
                 <span className="text-green-600 font-bold text-sm">
@@ -133,8 +133,8 @@ export default function ProductCard({ product, onViewDetails }: ProductCardProps
             disabled={!isInStock}
             className={`p-3 rounded-lg transition-all duration-200 ${
               isInStock
-                ? 'bg-amber-100 hover:bg-amber-200 text-amber-700'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                ? 'bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed'
             }`}
             aria-disabled={!isInStock}
             aria-label={isInStock ? `Add ${product.name} to cart` : `${product.name} is out of stock`}

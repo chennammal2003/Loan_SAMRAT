@@ -30,9 +30,9 @@ export default function ProductDetailModal({ product, onClose }: ProductDetailMo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200" role="dialog" aria-modal="true" aria-label="Product details">
-      <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-300">
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
-          <h2 className="text-xl font-bold text-gray-800">Product Details</h2>
+      <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-300">
+        <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between z-10">
+          <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Product Details</h2>
           <button
             onClick={onClose}
             type="button"
@@ -44,7 +44,7 @@ export default function ProductDetailModal({ product, onClose }: ProductDetailMo
         </div>
 
         <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-6">
             <div className="space-y-4">
               <div className="relative aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-amber-50 to-yellow-50 shadow-lg">
                 <img
@@ -72,43 +72,43 @@ export default function ProductDetailModal({ product, onClose }: ProductDetailMo
             <div className="space-y-6">
               <div>
                 <div className="flex items-start justify-between gap-4 mb-2">
-                  <h1 className="text-3xl font-bold text-gray-800">{product.name}</h1>
+                  <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">{product.name}</h1>
                   <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-lg text-sm font-semibold">
                     {product.purity}
                   </span>
                 </div>
-                <p className="text-gray-600 capitalize text-sm">{product.category}</p>
+                <p className="text-gray-600 dark:text-gray-300 capitalize text-sm">{product.category}</p>
               </div>
 
-              <p className="text-gray-700 leading-relaxed">{product.description}</p>
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{product.description}</p>
 
-              <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl p-6 space-y-4">
-                <h3 className="font-bold text-gray-800 flex items-center gap-2">
+              <div className="bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-gray-800 dark:to-gray-800 rounded-xl p-6 space-y-4">
+                <h3 className="font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-amber-600" />
                   Specifications
                 </h3>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-white rounded-lg p-3 shadow-sm">
-                    <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
+                  <div className="space-y-3 text-sm">
+                    <div className="flex items-center gap-3 text-gray-600 dark:text-gray-300">
                       <Weight className="w-4 h-4" />
                       Weight
                     </div>
-                    <div className="font-bold text-gray-800">{product.weight}g</div>
+                    <div className="font-bold text-gray-800 dark:text-gray-100">{product.weight}g</div>
                   </div>
 
-                  <div className="bg-white rounded-lg p-3 shadow-sm">
-                    <div className="text-gray-500 text-sm mb-1">Purity</div>
+                  <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm">
+                    <div className="text-gray-500 dark:text-gray-300 text-sm mb-1">Purity</div>
                     <div className="font-bold text-amber-600">{product.purity}</div>
                   </div>
 
-                  <div className="bg-white rounded-lg p-3 shadow-sm">
-                    <div className="text-gray-500 text-sm mb-1">Making Charges</div>
-                    <div className="font-bold text-gray-800">₹{makingCharges.toLocaleString()}</div>
+                  <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm">
+                    <div className="text-gray-500 dark:text-gray-300 text-sm mb-1">Making Charges</div>
+                    <div className="font-bold text-gray-800 dark:text-gray-100">₹{makingCharges.toLocaleString()}</div>
                   </div>
 
-                  <div className="bg-white rounded-lg p-3 shadow-sm">
-                    <div className="text-gray-500 text-sm mb-1">Stock</div>
+                  <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm">
+                    <div className="text-gray-500 dark:text-gray-300 text-sm mb-1">Stock</div>
                     <div className={`font-bold ${isInStock ? 'text-green-600' : 'text-red-600'}`}>
                       {isInStock ? `${product.stock_quantity} available` : 'Out of stock'}
                     </div>
@@ -116,11 +116,11 @@ export default function ProductDetailModal({ product, onClose }: ProductDetailMo
                 </div>
               </div>
 
-              <div className="bg-white border-2 border-amber-200 rounded-xl p-6">
+              <div className="bg-white dark:bg-gray-800 border-2 border-amber-200 dark:border-amber-300 rounded-xl p-6">
                 <div className="space-y-3">
                   {product.discount_percent > 0 ? (
                     <>
-                      <div className="flex justify-between text-gray-600">
+                      <div className="flex justify-between text-gray-600 dark:text-gray-300">
                         <span>Original Price</span>
                         <span className="line-through">₹{basePrice.toLocaleString()}</span>
                       </div>
@@ -128,8 +128,8 @@ export default function ProductDetailModal({ product, onClose }: ProductDetailMo
                         <span>Discount ({product.discount_percent}%)</span>
                         <span>-₹{(basePrice - discountedPrice).toLocaleString()}</span>
                       </div>
-                      <div className="border-t border-gray-200 pt-3 flex justify-between items-center">
-                        <span className="text-lg font-bold text-gray-800">Total Price</span>
+                      <div className="border-t border-gray-200 dark:border-gray-700 pt-3 flex justify-between items-center">
+                        <span className="text-lg font-bold text-gray-800 dark:text-gray-100">Total Price</span>
                         <span className="text-3xl font-bold bg-gradient-to-r from-amber-600 to-yellow-600 bg-clip-text text-transparent">
                           ₹{discountedPrice.toLocaleString()}
                         </span>
@@ -137,7 +137,7 @@ export default function ProductDetailModal({ product, onClose }: ProductDetailMo
                     </>
                   ) : (
                     <div className="flex justify-between items-center">
-                      <span className="text-lg font-bold text-gray-800">Total Price</span>
+                      <span className="text-lg font-bold text-gray-800 dark:text-gray-100">Total Price</span>
                       <span className="text-3xl font-bold bg-gradient-to-r from-amber-600 to-yellow-600 bg-clip-text text-transparent">
                         ₹{basePrice.toLocaleString()}
                       </span>
@@ -147,7 +147,7 @@ export default function ProductDetailModal({ product, onClose }: ProductDetailMo
               </div>
 
               <div className="space-y-4">
-                <h3 className="font-bold text-gray-800 text-sm">Payment Options</h3>
+                <h3 className="font-bold text-gray-800 dark:text-gray-100 text-sm">Payment Options</h3>
 
                 <div className="grid grid-cols-2 gap-3">
                   <button
@@ -156,7 +156,7 @@ export default function ProductDetailModal({ product, onClose }: ProductDetailMo
                     className={`py-3 rounded-xl font-semibold border transition-all ${
                       payFlow === 'pay_now'
                         ? 'bg-amber-100 border-amber-300 text-amber-700'
-                        : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800'
                     } ${!isInStock ? 'opacity-50 cursor-not-allowed' : ''}`}
                     type="button"
                   >
@@ -168,7 +168,7 @@ export default function ProductDetailModal({ product, onClose }: ProductDetailMo
                     className={`py-3 rounded-xl font-semibold border transition-all ${
                       payFlow === 'finance'
                         ? 'bg-amber-100 border-amber-300 text-amber-700'
-                        : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800'
                     } ${!isInStock ? 'opacity-50 cursor-not-allowed' : ''}`}
                     type="button"
                   >
@@ -181,28 +181,28 @@ export default function ProductDetailModal({ product, onClose }: ProductDetailMo
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       <button
                         onClick={() => setPayMethod('card')}
-                        className={`px-4 py-3 rounded-lg border text-sm font-medium ${payMethod === 'card' ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-gray-200 hover:bg-gray-50'}`}
+                        className={`px-4 py-3 rounded-lg border text-sm font-medium ${payMethod === 'card' ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 dark:text-gray-200'}`}
                         type="button"
                       >
                         Credit/Debit Card
                       </button>
                       <button
                         onClick={() => setPayMethod('upi')}
-                        className={`px-4 py-3 rounded-lg border text-sm font-medium ${payMethod === 'upi' ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-gray-200 hover:bg-gray-50'}`}
+                        className={`px-4 py-3 rounded-lg border text-sm font-medium ${payMethod === 'upi' ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 dark:text-gray-200'}`}
                         type="button"
                       >
                         UPI
                       </button>
                       <button
                         onClick={() => setPayMethod('netbanking')}
-                        className={`px-4 py-3 rounded-lg border text-sm font-medium ${payMethod === 'netbanking' ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-gray-200 hover:bg-gray-50'}`}
+                        className={`px-4 py-3 rounded-lg border text-sm font-medium ${payMethod === 'netbanking' ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 dark:text-gray-200'}`}
                         type="button"
                       >
                         NetBanking
                       </button>
                       <button
                         onClick={() => setPayMethod('wallet')}
-                        className={`px-4 py-3 rounded-lg border text-sm font-medium ${payMethod === 'wallet' ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-gray-200 hover:bg-gray-50'}`}
+                        className={`px-4 py-3 rounded-lg border text-sm font-medium ${payMethod === 'wallet' ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 dark:text-gray-200'}`}
                         type="button"
                       >
                         Digital Wallet
@@ -211,28 +211,28 @@ export default function ProductDetailModal({ product, onClose }: ProductDetailMo
 
                     {/* Details panel */}
                     {payMethod === 'card' && (
-                      <div className="space-y-3 bg-white border border-gray-200 rounded-lg p-4">
+                      <div className="space-y-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                         <div className="grid grid-cols-1 gap-3">
-                          <input className="border border-gray-200 rounded-lg px-3 py-2" placeholder="Card Number" />
-                          <input className="border border-gray-200 rounded-lg px-3 py-2" placeholder="Name on Card" />
+                          <input className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2" placeholder="Card Number" />
+                          <input className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2" placeholder="Name on Card" />
                           <div className="grid grid-cols-2 gap-3">
-                            <input className="border border-gray-200 rounded-lg px-3 py-2" placeholder="MM/YY" />
-                            <input className="border border-gray-200 rounded-lg px-3 py-2" placeholder="CVV" />
+                            <input className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2" placeholder="MM/YY" />
+                            <input className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2" placeholder="CVV" />
                           </div>
                         </div>
                         <button className="w-full py-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold">Pay ₹{discountedPrice.toLocaleString()}</button>
                       </div>
                     )}
                     {payMethod === 'upi' && (
-                      <div className="space-y-3 bg-white border border-gray-200 rounded-lg p-4">
-                        <input className="border border-gray-200 rounded-lg px-3 py-2 w-full" placeholder="Enter UPI ID (e.g., name@upi)" />
-                        <div className="text-sm text-gray-600">We also support QR — proceed to see QR.</div>
+                      <div className="space-y-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                        <input className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 w-full" placeholder="Enter UPI ID (e.g., name@upi)" />
+                        <div className="text-sm text-gray-600 dark:text-gray-300">We also support QR — proceed to see QR.</div>
                         <button className="w-full py-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold">Pay ₹{discountedPrice.toLocaleString()}</button>
                       </div>
                     )}
                     {payMethod === 'netbanking' && (
-                      <div className="space-y-3 bg-white border border-gray-200 rounded-lg p-4">
-                        <select className="border border-gray-200 rounded-lg px-3 py-2 w-full">
+                      <div className="space-y-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                        <select className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 w-full">
                           <option>Select your bank</option>
                           <option>HDFC Bank</option>
                           <option>ICICI Bank</option>
@@ -244,8 +244,8 @@ export default function ProductDetailModal({ product, onClose }: ProductDetailMo
                       </div>
                     )}
                     {payMethod === 'wallet' && (
-                      <div className="space-y-3 bg-white border border-gray-200 rounded-lg p-4">
-                        <select className="border border-gray-200 rounded-lg px-3 py-2 w-full">
+                      <div className="space-y-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                        <select className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 w-full">
                           <option>Select wallet</option>
                           <option>Paytm</option>
                           <option>PhonePe</option>
@@ -258,13 +258,13 @@ export default function ProductDetailModal({ product, onClose }: ProductDetailMo
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+                    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-400/40 rounded-lg p-4 text-sm text-amber-800 dark:text-amber-300">
                       Finance/EMI flow can be completed after KYC and eligibility check. We’ll guide you through a quick application.
                     </div>
                     <button
                       disabled={!isInStock}
                       className={`w-full flex items-center justify-center gap-3 py-3 rounded-xl font-semibold border-2 transition-all duration-200 ${
-                        isInStock ? 'border-amber-500 text-amber-600 hover:bg-amber-50' : 'border-gray-200 text-gray-400 cursor-not-allowed'
+                        isInStock ? 'border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/10' : 'border-gray-200 dark:border-gray-700 text-gray-400 cursor-not-allowed'
                       }`}
                       type="button"
                       aria-disabled={!isInStock}
