@@ -7,7 +7,7 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (username: string, email: string, password: string, role: 'merchant' | 'admin') => Promise<void>;
+  signUp: (username: string, email: string, password: string, role: 'merchant' | 'admin' | 'customer') => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       (async () => {
         setUser(session?.user ?? null);
         if (session?.user) {
@@ -82,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signUp = async (username: string, email: string, password: string, role: 'merchant' | 'admin') => {
+  const signUp = async (username: string, email: string, password: string, role: 'merchant' | 'admin' | 'customer') => {
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,

@@ -9,7 +9,7 @@ export default function SignUp() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState<'merchant' | 'admin'>('merchant');
+  const [role, setRole] = useState<'merchant' | 'admin' | 'customer'>('merchant');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -127,11 +127,12 @@ export default function SignUp() {
             <select
               id="role"
               value={role}
-              onChange={(e) => setRole(e.target.value as 'merchant' | 'admin')}
+              onChange={(e) => setRole(e.target.value as 'merchant' | 'admin' | 'customer')}
               className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             >
               <option value="merchant">Merchant</option>
               <option value="admin">Admin</option>
+              <option value="customer">Customer</option>
             </select>
           </div>
 

@@ -18,6 +18,13 @@ import MerchantDetails from './components/MerchantDetails';
 import MerchantDashboard from './components/MerchantDashboard';
 import PageShell from './components/PageShell';
 import Product from './components/products';
+import StorePage from './components/StorePage';
+import CustomerHome from './components/customer/CustomerHome';
+import CustomerOrders from './components/customer/CustomerOrders';
+import CustomerProfile from './components/customer/CustomerProfile';
+import CustomerShell from './components/customer/CustomerShell';
+import { WishlistProvider } from './contexts/WishlistContext';
+import WishlistPage from './components/customer/WishlistPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -30,6 +37,21 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
     );
   }
   return user ? <>{children}</> : <Navigate to="/signin" />;
+}
+
+function CustomerRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading, profile } = useAuth();
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+  if (!user) return <Navigate to="/signin" replace />;
+  if (!profile) return null;
+  if (profile.role !== 'customer') return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
 }
 
 function MerchantRoute({ children }: { children: React.ReactNode }) {
@@ -88,7 +110,10 @@ function DashboardRouter() {
     );
   }
 
-  return profile.role === 'admin' ? <AdminDashboard /> : <MerchantDashboard />;
+  if (profile.role === 'admin') return <AdminDashboard />;
+  if (profile.role === 'merchant') return <MerchantDashboard />;
+  // Customer: send to customer area (index renders store)
+  return <Navigate to="/customer" replace />;
 }
 
 function App() {
@@ -96,6 +121,7 @@ function App() {
     <BrowserRouter>
       <ThemeProvider>
         <AuthProvider>
+          <WishlistProvider>
           <Routes>
             <Route path="/signin" element={<SignIn />} />
             <Route path="/signup" element={<SignUp />} />
@@ -112,6 +138,15 @@ function App() {
             <Route path="/disbursed" element={<MerchantRoute><PageShell><MerchantDisbursedLoans /></PageShell></MerchantRoute>} />
             <Route path="/payments" element={<MerchantRoute><PageShell><MerchantPaymentTracker /></PageShell></MerchantRoute>} />
             <Route path="/products" element={<MerchantRoute><PageShell><Product /></PageShell></MerchantRoute>} />
+            {/* Customer area with shared shell/header */}
+            <Route path="/customer" element={<CustomerRoute><CustomerShell /></CustomerRoute>}>
+              <Route index element={<StorePage />} />
+              <Route path="store" element={<StorePage />} />
+              <Route path="home" element={<CustomerHome />} />
+              <Route path="wishlist" element={<WishlistPage />} />
+              <Route path="orders" element={<CustomerOrders />} />
+              <Route path="profile" element={<CustomerProfile />} />
+            </Route>
             <Route
               path="/dashboard/*"
               element={
@@ -122,6 +157,7 @@ function App() {
             />
             <Route path="/" element={<Navigate to="/dashboard" />} />
           </Routes>
+          </WishlistProvider>
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>
