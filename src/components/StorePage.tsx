@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
 import ProductCard from './ProductCard';
 import ProductDetailModal from './ProductDetailModal';
@@ -38,18 +39,7 @@ export default function StorePage() {
   const [weightMax, setWeightMax] = useState<number>(50);
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<null | {
-    id: string;
-    name: string;
-    category: string;
-    purity: string;
-    weight: number;
-    price: number;
-    discount_percent: number;
-    stock_quantity: number;
-    image_url: string;
-    description: string;
-  }>(null);
+  // Full-page product detail now, no modal state
   const [products, setProducts] = useState<{
     id: string;
     name: string;
@@ -69,6 +59,7 @@ export default function StorePage() {
   const { theme } = useTheme();
   const [inStockOnly, setInStockOnly] = useState(false);
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const navigate = useNavigate();
 
   useEffect(() => {
     (async () => {
@@ -336,17 +327,12 @@ export default function StorePage() {
             <ProductCard
               key={product.id}
               product={product}
-              onViewDetails={() => setSelectedProduct(product)}
+              onViewDetails={() => navigate(`/customer/product/${product.id}`)}
             />
           ))}
         </div>
       )}
-      {selectedProduct && (
-        <ProductDetailModal
-          product={selectedProduct}
-          onClose={() => setSelectedProduct(null)}
-        />
-      )}
+      {/* No modal; product detail opens as full page */}
     </div>
   );
 }
