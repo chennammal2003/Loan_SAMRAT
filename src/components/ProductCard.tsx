@@ -1,5 +1,6 @@
 import { ShoppingCart, Eye, Tag, Heart } from 'lucide-react';
 import { useWishlist } from '../contexts/WishlistContext';
+import { useCart } from '../contexts/CartContext';
 
 interface Product {
   id: string;
@@ -26,10 +27,11 @@ export default function ProductCard({ product, onViewDetails }: ProductCardProps
   const isInStock = product.stock_quantity > 0;
   const { toggle, has } = useWishlist();
   const wished = has(product.id);
+  const { add } = useCart();
 
   return (
     <div className="bg-white dark:bg-gray-900 rounded-xl shadow-md overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 group" role="article" aria-label={product.name}>
-      <div className="relative overflow-hidden aspect-square bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-gray-800 dark:to-gray-800">
+      <div className="relative overflow-hidden aspect-[4/3] bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-gray-800 dark:to-gray-800">
         {product.image_url ? (
           <img
             src={product.image_url}
@@ -69,9 +71,9 @@ export default function ProductCard({ product, onViewDetails }: ProductCardProps
         </button>
       </div>
 
-      <div className="p-5 space-y-3">
+      <div className="p-4 space-y-2.5">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="font-bold text-gray-800 dark:text-gray-100 text-lg line-clamp-2 flex-1">
+          <h3 className="font-bold text-gray-800 dark:text-gray-100 text-base line-clamp-2 flex-1">
             {product.name}
           </h3>
           <span className="bg-amber-100 text-amber-700 px-2 py-1 rounded-md text-xs font-semibold whitespace-nowrap">
@@ -91,7 +93,7 @@ export default function ProductCard({ product, onViewDetails }: ProductCardProps
           </span>
         </div>
 
-        <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+        <div className="pt-2.5 border-t border-gray-100 dark:border-gray-800">
           {product.discount_percent > 0 ? (
             <div className="space-y-1">
               <div className="flex items-center gap-2">
@@ -102,12 +104,12 @@ export default function ProductCard({ product, onViewDetails }: ProductCardProps
                   Save ₹{(basePrice - discountedPrice).toLocaleString()}
                 </span>
               </div>
-              <div className="text-2xl font-bold bg-gradient-to-r from-amber-600 to-yellow-600 bg-clip-text text-transparent">
+              <div className="text-xl font-bold bg-gradient-to-r from-amber-600 to-yellow-600 bg-clip-text text-transparent">
                 ₹{discountedPrice.toLocaleString()}
               </div>
             </div>
           ) : (
-            <div className="text-2xl font-bold bg-gradient-to-r from-amber-600 to-yellow-600 bg-clip-text text-transparent">
+            <div className="text-xl font-bold bg-gradient-to-r from-amber-600 to-yellow-600 bg-clip-text text-transparent">
               ₹{basePrice.toLocaleString()}
             </div>
           )}
@@ -117,7 +119,7 @@ export default function ProductCard({ product, onViewDetails }: ProductCardProps
           <button
             type="button"
             disabled={!isInStock}
-            className={`flex-1 py-3 rounded-lg font-semibold transition-all duration-200 ${
+            className={`flex-1 py-2.5 rounded-lg font-semibold transition-all duration-200 ${
               isInStock
                 ? 'bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white shadow-md hover:shadow-lg'
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'
@@ -131,13 +133,14 @@ export default function ProductCard({ product, onViewDetails }: ProductCardProps
           <button
             type="button"
             disabled={!isInStock}
-            className={`p-3 rounded-lg transition-all duration-200 ${
+            className={`p-2.5 rounded-lg transition-all duration-200 ${
               isInStock
                 ? 'bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-300'
                 : 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed'
             }`}
             aria-disabled={!isInStock}
             aria-label={isInStock ? `Add ${product.name} to cart` : `${product.name} is out of stock`}
+            onClick={isInStock ? () => add({ id: product.id, name: product.name, price: discountedPrice, image_url: product.image_url }) : undefined}
           >
             <ShoppingCart className="w-5 h-5" />
           </button>

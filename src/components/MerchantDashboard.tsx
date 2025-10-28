@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { FileText, LogOut, Moon, Sun, Plus, List, Package, User, HandCoins, Share2, TrendingUp } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import ApplyLoanModal from './ApplyLoanModal';
-import ShareLinkModal from './ShareLinkModal.tsx';
 import LoanDetails from './LoanDetails';
 import MerchantDisbursedLoans from './MerchantDisbursedLoans';
 import Product from './products';
@@ -12,8 +11,11 @@ import MerchantProfilePanel from './MerchantProfilePanel';
 import DashboardStats from './DashboardStats';
 import MerchantProfileGate from './MerchantProfileGate';
 import MerchantPaymentTracker from './MerchantPaymentTracker';
+import LiveMetalRates from './LiveMetalRates';
+import ShareLinkPanel from './ShareLinkPanel';
+import MerchantOrders from './merchant/MerchantOrders';
 
-type ActiveTab = 'home' | 'apply' | 'loans' | 'disbursed' | 'paymentTracker' | 'products';
+type ActiveTab = 'home' | 'apply' | 'loans' | 'disbursed' | 'paymentTracker' | 'products' | 'share' | 'orders';
 
 export default function MerchantDashboard() {
   const { profile, signOut } = useAuth();
@@ -21,7 +23,6 @@ export default function MerchantDashboard() {
   const { theme, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [showApplyModal, setShowApplyModal] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
   const [showProfilePanel, setShowProfilePanel] = useState(false);
   const [loanInitialFilter, setLoanInitialFilter] = useState<'All' | 'Pending' | 'Accepted' | 'Rejected'>('All');
   const [showProfileSetup, setShowProfileSetup] = useState(true);
@@ -76,7 +77,7 @@ export default function MerchantDashboard() {
           </button>
 
           <button
-            onClick={() => setShowShareModal(true)}
+            onClick={() => setActiveTab('share')}
             className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           >
             <Share2 className="w-5 h-5" />
@@ -131,6 +132,18 @@ export default function MerchantDashboard() {
             <span>Products</span>
           </button>
 
+          <button
+            onClick={() => setActiveTab('orders')}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+              activeTab === 'orders'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            <List className="w-5 h-5" />
+            <span>Orders</span>
+          </button>
+
           {/* New: Profile item opens slide-over panel */}
           <button
             onClick={() => setShowProfilePanel(true)}
@@ -171,13 +184,18 @@ export default function MerchantDashboard() {
               {activeTab === 'disbursed' && 'My Disbursed Loans'}
               {activeTab === 'paymentTracker' && 'My Payment Tracker'}
               {activeTab === 'products' && 'Products'}
+              {activeTab === 'share' && 'Share Apply Link'}
+              {activeTab === 'orders' && 'Orders'}
             </h1>
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-            >
-              {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5 text-yellow-400" />}
-            </button>
+            <div className="flex items-center gap-4">
+              <LiveMetalRates />
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5 text-yellow-400" />}
+              </button>
+            </div>
           </div>
         </header>
 
@@ -202,6 +220,16 @@ export default function MerchantDashboard() {
               <Product />
             </div>
           )}
+          {activeTab === 'share' && (
+            <div className="space-y-6">
+              <ShareLinkPanel />
+            </div>
+          )}
+          {activeTab === 'orders' && (
+            <div className="space-y-6">
+              <MerchantOrders />
+            </div>
+          )}
         </div>
       </main>
 
@@ -214,10 +242,6 @@ export default function MerchantDashboard() {
             setActiveTab('loans');
           }}
         />
-      )}
-
-      {showShareModal && (
-        <ShareLinkModal onClose={() => setShowShareModal(false)} />
       )}
 
       {/* Slide-over Profile Panel opens on the opposite side (right) */}

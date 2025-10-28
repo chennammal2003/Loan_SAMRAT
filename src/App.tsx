@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { CartProvider } from './contexts/CartContext';
 import SignIn from './pages/SignIn';
 import SignUp from './pages/SignUp';
 import ForgotPassword from './pages/ForgotPassword';
@@ -25,6 +26,8 @@ import CustomerProfile from './components/customer/CustomerProfile';
 import CustomerShell from './components/customer/CustomerShell';
 import { WishlistProvider } from './contexts/WishlistContext';
 import WishlistPage from './components/customer/WishlistPage';
+import CartPage from './components/customer/CartPage';
+import CheckoutPage from './components/customer/CheckoutPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -121,6 +124,7 @@ function App() {
     <BrowserRouter>
       <ThemeProvider>
         <AuthProvider>
+          <CartProvider>
           <WishlistProvider>
           <Routes>
             <Route path="/signin" element={<SignIn />} />
@@ -146,6 +150,8 @@ function App() {
               <Route path="wishlist" element={<WishlistPage />} />
               <Route path="orders" element={<CustomerOrders />} />
               <Route path="profile" element={<CustomerProfile />} />
+              <Route path="cart" element={<CartPage /> } />
+              <Route path="checkout" element={<CheckoutPage /> } />
             </Route>
             <Route
               path="/dashboard/*"
@@ -158,6 +164,7 @@ function App() {
             <Route path="/" element={<Navigate to="/dashboard" />} />
           </Routes>
           </WishlistProvider>
+          </CartProvider>
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

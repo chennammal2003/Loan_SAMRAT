@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Shield, LogOut, Moon, Sun, List, CheckCircle, Users, HandCoins, TrendingUp } from 'lucide-react';
+import { Shield, LogOut, Moon, Sun, List, CheckCircle, Users, HandCoins, TrendingUp, Package } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import ManageLoans from './ManageLoans';
 import AcceptedLoans from './AcceptedLoans';
@@ -9,8 +9,10 @@ import DisbursedLoans from './DisbursedLoans';
 import MerchantDetails from './MerchantDetails';
 import DashboardStats from './DashboardStats';
 import PaymentTracker from './paymentTracker';
+import UsersAdmin from './admin/UsersAdmin';
+import ProductsAdmin from './admin/ProductsAdmin';
 
-type ActiveTab = 'home' | 'manage' | 'accepted' | 'disbursed' | 'payments' | 'merchants';
+type ActiveTab = 'home' | 'manage' | 'accepted' | 'disbursed' | 'payments' | 'merchants' | 'users' | 'products';
 
 export default function AdminDashboard() {
   const { profile, signOut } = useAuth();
@@ -55,6 +57,30 @@ export default function AdminDashboard() {
           >
             <Shield className="w-5 h-5" />
             <span>Dashboard</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('users')}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+              activeTab === 'users'
+                ? 'bg-orange-600 text-white'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            <Users className="w-5 h-5" />
+            <span>Users</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('products')}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+              activeTab === 'products'
+                ? 'bg-orange-600 text-white'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            <Package className="w-5 h-5" />
+            <span>Products</span>
           </button>
 
           <button
@@ -145,12 +171,14 @@ export default function AdminDashboard() {
         <header className="bg-white dark:bg-gray-800 shadow-sm">
           <div className="px-8 py-4 flex justify-between items-center">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              {activeTab === 'home' && 'Admin Dashboard'}
-              {activeTab === 'manage' && 'Manage Loan Applications'}
+              {activeTab === 'home' && 'Dashboard'}
+              {activeTab === 'users' && 'Users'}
+              {activeTab === 'products' && 'Products'}
+              {activeTab === 'manage' && 'Manage Loans'}
               {activeTab === 'accepted' && 'Accepted Loans'}
               {activeTab === 'disbursed' && 'Disbursed Loans'}
               {activeTab === 'payments' && 'Payment Tracker'}
-              {activeTab === 'merchants' && 'Merchant Information'}
+              {activeTab === 'merchants' && 'Merchants'}
             </h1>
             <button
               onClick={toggleTheme}
@@ -170,6 +198,8 @@ export default function AdminDashboard() {
               }}
             />
           )}
+          {activeTab === 'users' && <UsersAdmin />}
+          {activeTab === 'products' && <ProductsAdmin />}
           {activeTab === 'manage' && <ManageLoans initialStatusFilter={manageInitialFilter} />}
           {activeTab === 'accepted' && <AcceptedLoans />}
           {activeTab === 'disbursed' && <DisbursedLoans />}

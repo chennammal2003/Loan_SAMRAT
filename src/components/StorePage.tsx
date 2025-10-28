@@ -5,8 +5,10 @@ import ProductDetailModal from './ProductDetailModal';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
 
-type Category = 'all' | 'necklace' | 'ring' | 'bangle' | 'chain' | 'earring' | 'pendant' | 'coin' | 'bracelet';
-type Purity = 'all' | '18K' | '20K' | '22K' | '24K';
+type Category = string;
+type Purity = string;
+type MetalType = string;
+
 type SortOption = 'price-asc' | 'price-desc' | 'newest';
 
 type DBProduct = {
@@ -27,10 +29,13 @@ type DBProduct = {
 
 export default function StorePage() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<Category>('all');
-  const [selectedPurity, setSelectedPurity] = useState<Purity>('all');
-  const [priceRange, setPriceRange] = useState<[number, number]>([0, 200000]);
-  const [weightRange, setWeightRange] = useState<[number, number]>([0, 50]);
+  const [selectedCategories, setSelectedCategories] = useState<Category[]>([]);
+  const [selectedPurities, setSelectedPurities] = useState<Purity[]>([]);
+  const [selectedMetals, setSelectedMetals] = useState<MetalType[]>([]);
+  const [priceMin, setPriceMin] = useState<number>(0);
+  const [priceMax, setPriceMax] = useState<number>(200000);
+  const [weightMin, setWeightMin] = useState<number>(0);
+  const [weightMax, setWeightMax] = useState<number>(50);
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<null | {
@@ -57,6 +62,7 @@ export default function StorePage() {
     image_url: string;
     description: string;
     created_at?: string;
+    metal_type?: string;
   }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +92,7 @@ export default function StorePage() {
           image_url: p.image_url || '',
           description: p.description || '',
           created_at: p.created_at || undefined,
+          metal_type: p.metal_type || '',
         }));
         setProducts(mapped);
       } catch (e: any) {
@@ -102,30 +109,35 @@ export default function StorePage() {
     return () => clearTimeout(t);
   }, [searchQuery]);
 
-  const categories: { value: Category; label: string }[] = [
-    { value: 'all', label: 'All Items' },
-    { value: 'necklace', label: 'Necklaces' },
-    { value: 'ring', label: 'Rings' },
-    { value: 'bangle', label: 'Bangles' },
-    { value: 'chain', label: 'Chains' },
-    { value: 'earring', label: 'Earrings' },
-    { value: 'pendant', label: 'Pendants' },
-    { value: 'coin', label: 'Coins' },
-    { value: 'bracelet', label: 'Bracelets' },
-  ];
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    products.forEach(p => { if (p.category) set.add(p.category); });
+    return Array.from(set).sort().map(v => ({ value: v, label: v }));
+  }, [products]);
 
-  const purities: Purity[] = ['all', '18K', '20K', '22K', '24K'];
+  const purities: Purity[] = useMemo(() => {
+    const set = new Set<string>();
+    products.forEach(p => { if (p.purity) set.add(p.purity); });
+    return Array.from(set).sort();
+  }, [products]);
+
+  const metals: MetalType[] = useMemo(() => {
+    const set = new Set<string>();
+    products.forEach(p => { if (p.metal_type) set.add(p.metal_type); });
+    return Array.from(set).sort();
+  }, [products]);
 
   const filteredProducts = useMemo(() => {
     const base = products.filter((product) => {
       const q = debouncedQuery.toLowerCase();
-      const matchesSearch = product.name.toLowerCase().includes(q);
-      const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
-      const matchesPurity = selectedPurity === 'all' || product.purity === selectedPurity;
-      const matchesPrice = product.price >= priceRange[0] && product.price <= priceRange[1];
-      const matchesWeight = product.weight >= weightRange[0] && product.weight <= weightRange[1];
+      const matchesSearch = product.name.toLowerCase().includes(q) || product.description.toLowerCase().includes(q);
+      const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(product.category as Category);
+      const matchesPurity = selectedPurities.length === 0 || selectedPurities.includes(product.purity as Purity);
+      const matchesMetal = selectedMetals.length === 0 || selectedMetals.includes((product.metal_type || '') as MetalType);
+      const matchesPrice = product.price >= priceMin && product.price <= priceMax;
+      const matchesWeight = product.weight >= weightMin && product.weight <= weightMax;
       const matchesStock = !inStockOnly || product.stock_quantity > 0;
-      return matchesSearch && matchesCategory && matchesPurity && matchesPrice && matchesWeight && matchesStock;
+      return matchesSearch && matchesCategory && matchesPurity && matchesMetal && matchesPrice && matchesWeight && matchesStock;
     });
     const sorted = [...base].sort((a, b) => {
       if (sortBy === 'price-asc') return a.price - b.price;
@@ -136,7 +148,7 @@ export default function StorePage() {
       return bt - at;
     });
     return sorted;
-  }, [products, debouncedQuery, selectedCategory, selectedPurity, priceRange, weightRange, inStockOnly, sortBy]);
+  }, [products, debouncedQuery, selectedCategories, selectedPurities, selectedMetals, priceMin, priceMax, weightMin, weightMax, inStockOnly, sortBy]);
 
   return (
     <div className="space-y-6">
@@ -167,87 +179,101 @@ export default function StorePage() {
           </div>
 
           {showFilters && (
-            <div className="mt-5 pt-5 border-t border-gray-200 dark:border-gray-800 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">Category</label>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {categories.map(cat => (
-                  <button
-                    key={cat.value}
-                    onClick={() => setSelectedCategory(cat.value)}
-                    className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                      selectedCategory === cat.value
-                        ? 'bg-amber-100 text-amber-700 font-medium'
-                        : 'hover:bg-gray-50 text-gray-700'
-                    }`}
-                  >
-                    {cat.label}
-                  </button>
-                ))}
+            <div className="mt-5 pt-5 border-t border-gray-200 dark:border-gray-800 grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-3">Category</label>
+                <div className="space-y-2 max-h-56 overflow-y-auto">
+                  {categories.map(cat => {
+                    const checked = selectedCategories.includes(cat.value);
+                    return (
+                      <label key={cat.value} className="flex items-center gap-2 text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setSelectedCategories(prev => checked ? prev.filter(c => c !== cat.value) : [...prev, cat.value]);
+                          }}
+                          className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                        />
+                        {cat.label}
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">Purity</label>
-              <div className="space-y-2">
-                {purities.map(purity => (
-                  <button
-                    key={purity}
-                    onClick={() => setSelectedPurity(purity)}
-                    className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                      selectedPurity === purity
-                        ? 'bg-amber-100 text-amber-700 font-medium'
-                        : 'hover:bg-gray-50 text-gray-700'
-                    }`}
-                  >
-                    {purity === 'all' ? 'All Purities' : purity}
-                  </button>
-                ))}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-3">Purity</label>
+                <div className="space-y-2">
+                  {purities.map(purity => {
+                    const checked = selectedPurities.includes(purity);
+                    return (
+                      <label key={purity} className="flex items-center gap-2 text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setSelectedPurities(prev => checked ? prev.filter(p => p !== purity) : [...prev, purity]);
+                          }}
+                          className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                        />
+                        {purity}
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">
-                Price Range: ₹{priceRange[0].toLocaleString()} - ₹{priceRange[1].toLocaleString()}
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="200000"
-                step="10000"
-                value={priceRange[1]}
-                onChange={(e) => setPriceRange([priceRange[0], parseInt(e.target.value)])}
-                className="w-full accent-amber-500"
-              />
-            </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-3">Metal Type</label>
+                <div className="space-y-2">
+                  {metals.map(m => {
+                    const checked = selectedMetals.includes(m);
+                    return (
+                      <label key={m} className="flex items-center gap-2 text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setSelectedMetals(prev => checked ? prev.filter(x => x !== m) : [...prev, m]);
+                          }}
+                          className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                        />
+                        {m}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">
-                Weight Range: {weightRange[0]}g - {weightRange[1]}g
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="50"
-                step="5"
-                value={weightRange[1]}
-                onChange={(e) => setWeightRange([weightRange[0], parseInt(e.target.value)])}
-                className="w-full accent-amber-500"
-              />
-            </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-3">Price (₹)</label>
+                <div className="flex items-center gap-3">
+                  <input type="number" value={priceMin} onChange={(e)=> setPriceMin(Number(e.target.value)||0)} min={0} className="w-24 px-3 py-2 border rounded" placeholder="Min" />
+                  <span className="text-gray-400">—</span>
+                  <input type="number" value={priceMax} onChange={(e)=> setPriceMax(Number(e.target.value)||0)} min={0} className="w-28 px-3 py-2 border rounded" placeholder="Max" />
+                </div>
+              </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">Availability</label>
-              <label className="inline-flex items-center gap-2 text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={inStockOnly}
-                  onChange={(e) => setInStockOnly(e.target.checked)}
-                  className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                />
-                In stock only
-              </label>
-            </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-3">Weight (g)</label>
+                <div className="flex items-center gap-3">
+                  <input type="number" value={weightMin} onChange={(e)=> setWeightMin(Number(e.target.value)||0)} min={0} className="w-20 px-3 py-2 border rounded" placeholder="Min" />
+                  <span className="text-gray-400">—</span>
+                  <input type="number" value={weightMax} onChange={(e)=> setWeightMax(Number(e.target.value)||0)} min={0} className="w-20 px-3 py-2 border rounded" placeholder="Max" />
+                </div>
+                <div className="mt-3">
+                  <label className="inline-flex items-center gap-2 text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={inStockOnly}
+                      onChange={(e) => setInStockOnly(e.target.checked)}
+                      className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                    />
+                    In stock only
+                  </label>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -271,7 +297,7 @@ export default function StorePage() {
         </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="bg-white rounded-xl shadow-md overflow-hidden animate-pulse">
               <div className="aspect-square bg-gray-200" />
@@ -290,10 +316,13 @@ export default function StorePage() {
           <p className="text-gray-500 text-lg">No products match your filters</p>
           <button
             onClick={() => {
-              setSelectedCategory('all');
-              setSelectedPurity('all');
-              setPriceRange([0, 200000]);
-              setWeightRange([0, 50]);
+              setSelectedCategories([]);
+              setSelectedPurities([]);
+              setSelectedMetals([]);
+              setPriceMin(0);
+              setPriceMax(200000);
+              setWeightMin(0);
+              setWeightMax(50);
               setSearchQuery('');
             }}
             className="mt-4 px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-colors"
@@ -302,7 +331,7 @@ export default function StorePage() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
           {filteredProducts.map(product => (
             <ProductCard
               key={product.id}

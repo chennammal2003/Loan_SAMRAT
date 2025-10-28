@@ -1,5 +1,7 @@
 import React from 'react';
 import { X, Wallet, Tag, Weight, Sparkles } from 'lucide-react';
+import { useCart } from '../contexts/CartContext';
+import { useNavigate } from 'react-router-dom';
 
 interface Product {
   id: string;
@@ -27,6 +29,28 @@ export default function ProductDetailModal({ product, onClose }: ProductDetailMo
   const isInStock = product.stock_quantity > 0;
   const [payFlow, setPayFlow] = React.useState<'pay_now' | 'finance'>('pay_now');
   const [payMethod, setPayMethod] = React.useState<'card' | 'upi' | 'netbanking' | 'wallet' | null>(null);
+  const { add } = useCart();
+  const navigate = useNavigate();
+
+  const [tenure, setTenure] = React.useState<number>(6);
+  const [monthlyRate, setMonthlyRate] = React.useState<number>(0.03); // 3% default
+  const emi = React.useMemo(() => {
+    const P = discountedPrice;
+    const r = monthlyRate;
+    const n = tenure;
+    if (P <= 0 || r <= 0 || n <= 0) return 0;
+    const pow = Math.pow(1 + r, n);
+    return Math.round((P * r * pow) / (pow - 1));
+  }, [discountedPrice, monthlyRate, tenure]);
+
+  const handleAddToCart = () => {
+    add({ id: product.id, name: product.name, price: discountedPrice, image_url: product.image_url });
+  };
+
+  const handleBuyNow = () => {
+    handleAddToCart();
+    navigate('/customer/checkout');
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200" role="dialog" aria-modal="true" aria-label="Product details">
@@ -274,6 +298,51 @@ export default function ProductDetailModal({ product, onClose }: ProductDetailMo
                     </button>
                   </div>
                 )}
+              </div>
+
+              <div className="space-y-4">
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-100 dark:border-gray-700">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="font-semibold text-gray-800 dark:text-gray-100">Flexible EMI</div>
+                    <div className="text-sm text-gray-500">Monthly EMI estimate</div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Tenure (months)</label>
+                      <select value={tenure} onChange={(e)=> setTenure(Number(e.target.value))} className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
+                        {[3,6,9,12,18,24].map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Monthly Rate</label>
+                      <select value={monthlyRate} onChange={(e)=> setMonthlyRate(Number(e.target.value))} className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
+                        <option value={0.02}>2% / mo</option>
+                        <option value={0.025}>2.5% / mo</option>
+                        <option value={0.03}>3% / mo</option>
+                        <option value={0.035}>3.5% / mo</option>
+                        <option value={0.04}>4% / mo</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-lg font-bold">EMI: ₹{emi.toLocaleString('en-IN')}</div>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={handleAddToCart}
+                    disabled={!isInStock}
+                    className={`flex-1 flex items-center justify-center gap-2 ${isInStock ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-300'} text-white px-6 py-3 rounded-xl font-medium transition-all duration-300 shadow`}
+                  >
+                    Add to Cart
+                  </button>
+                  <button
+                    onClick={handleBuyNow}
+                    disabled={!isInStock}
+                    className={`flex-1 flex items-center justify-center gap-2 ${isInStock ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-300'} text-white px-6 py-3 rounded-xl font-medium transition-all duration-300 shadow`}
+                  >
+                    <Wallet className="w-5 h-5" /> Buy Now
+                  </button>
+                </div>
               </div>
             </div>
           </div>

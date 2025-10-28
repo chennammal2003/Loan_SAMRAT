@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, X, Pencil, Trash2, Eye, Gem, Weight, Package, TrendingDown, Box } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { fetchMetalRates, type MetalRates } from '../lib/metals';
 
 interface ProductFormData {
   name: string;
@@ -16,6 +17,7 @@ interface ProductFormData {
   stockQty: string;
   imageUrl: string;
   image: File | null;
+  makingCharge: string;
 }
 
 interface ProductRecord {
@@ -53,6 +55,8 @@ export default function Product() {
   const [filterGemstone, setFilterGemstone] = useState('');
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
+  const [rates, setRates] = useState<MetalRates | null>(null);
+  const [ratesError, setRatesError] = useState<string | null>(null);
   const [formData, setFormData] = useState<ProductFormData>({
     name: '',
     description: '',
@@ -66,6 +70,7 @@ export default function Product() {
     stockQty: '',
     imageUrl: '',
     image: null,
+    makingCharge: '',
   });
 
   useEffect(() => {
@@ -109,6 +114,7 @@ export default function Product() {
       stockQty: '',
       imageUrl: '',
       image: null,
+      makingCharge: '',
     });
   };
 
@@ -159,6 +165,7 @@ export default function Product() {
       stockQty: p.stock_qty != null ? String(p.stock_qty) : '',
       imageUrl: p.image_url ?? '',
       image: null,
+      makingCharge: '',
     });
     setIsModalOpen(true);
   };
@@ -741,6 +748,19 @@ export default function Product() {
 
             <form onSubmit={handleSubmit} className="p-6">
               <div className="space-y-5">
+                {(() => {
+                  // Lazy init: fetch rates on modal open
+                  if (rates === null && !ratesError) {
+                    const ctrl = new AbortController();
+                    fetchMetalRates(ctrl.signal)
+                      .then((d) => setRates(d))
+                      .catch((e) => setRatesError(e?.message || 'Failed to load metal rates'));
+                  }
+                  return null;
+                })()}
+                {ratesError && (
+                  <div className="text-sm text-red-600 dark:text-red-400">{ratesError}</div>
+                )}
                 <div>
                   <label htmlFor="name" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">
                     Product Name
@@ -830,23 +850,83 @@ export default function Product() {
                   </div>
                 </div>
 
-                <div>
-                  <label htmlFor="price" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">
-                    Price
-                  </label>
-                  <input
-                    type="number"
-                    id="price"
-                    name="price"
-                    value={formData.price}
-                    onChange={handleInputChange}
-                    required
-                    step="0.01"
-                    min="0"
-                    className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                    placeholder="0.00"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="makingCharge" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Making Charge (₹)</label>
+                    <input
+                      type="number"
+                      id="makingCharge"
+                      name="makingCharge"
+                      value={formData.makingCharge}
+                      onChange={handleInputChange}
+                      step="0.01"
+                      min="0"
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                      placeholder="e.g., 1500"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="price" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Final Price (₹)</label>
+                    <input
+                      type="number"
+                      id="price"
+                      name="price"
+                      value={formData.price}
+                      onChange={handleInputChange}
+                      required
+                      step="0.01"
+                      min="0"
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                      placeholder="0.00"
+                    />
+                  </div>
                 </div>
+                {(() => {
+                  const weight = parseFloat(formData.weight || '0');
+                  const making = parseFloat(formData.makingCharge || '0');
+                  const metal = formData.metalType;
+                  const purity = formData.purity;
+                  let perGram = 0;
+                  if (rates) {
+                    if (metal === 'Gold') {
+                      const karat = purity.endsWith('K') ? parseInt(purity) : 24;
+                      const base24 = rates.perGram.gold24k;
+                      perGram = base24 * (karat / 24);
+                    } else if (metal === 'Silver') {
+                      perGram = rates.perGram.silver;
+                    }
+                  }
+                  const suggested = perGram > 0 && weight > 0 ? perGram * weight + making : null;
+                  return (
+                    <div className="rounded-xl border border-slate-200 dark:border-gray-700 p-3 text-sm flex items-center justify-between">
+                      <div className="text-slate-600 dark:text-gray-300">
+                        {rates ? (
+                          suggested != null ? (
+                            <span>Suggested price from live rate: <b>₹{Math.round(suggested).toLocaleString('en-IN')}</b></span>
+                          ) : (
+                            <span>Enter metal, purity, and weight to see suggested price</span>
+                          )
+                        ) : (
+                          <span>Fetching live metal rates…</span>
+                        )}
+                      </div>
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (suggested != null) {
+                              setFormData((prev) => ({ ...prev, price: String(Math.round(suggested)) }));
+                            }
+                          }}
+                          className="px-3 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-60"
+                          disabled={suggested == null}
+                        >
+                          Use live price
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>

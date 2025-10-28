@@ -4,6 +4,7 @@ import { ShoppingCart, Heart } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWishlist } from '../../contexts/WishlistContext';
+import { useCart } from '../../contexts/CartContext';
 
 export default function CustomerShell() {
   const { theme, toggleTheme } = useTheme();
@@ -11,6 +12,7 @@ export default function CustomerShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const { ids: wishlistIds } = useWishlist();
+  const { count: cartCount } = useCart();
 
   const handleLogout = async () => {
     try {
@@ -89,9 +91,11 @@ export default function CustomerShell() {
                 </svg>
               )}
             </button>
-            <button type="button" aria-label="Cart" className="relative p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:shadow">
+            <button type="button" aria-label="Cart" onClick={() => navigate('/customer/cart')} className="relative p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:shadow">
               <ShoppingCart className="w-5 h-5 text-gray-700 dark:text-gray-200" />
-              <span className="absolute -top-1 -right-1 text-[10px] leading-none bg-amber-500 text-white rounded-full px-1.5 py-1 shadow">3</span>
+              {cartCount > 0 && (
+                <span className="absolute -top-1 -right-1 text-[10px] leading-none bg-amber-500 text-white rounded-full px-1.5 py-1 shadow">{cartCount}</span>
+              )}
             </button>
           </div>
         </div>
