@@ -72,7 +72,7 @@ export default function ProductDetailPage() {
 
   const handleBuyNow = () => {
     handleAddToCart();
-    navigate('/customer/checkout');
+    navigate('/customer/payment-choice');
   };
 
   if (loading) {

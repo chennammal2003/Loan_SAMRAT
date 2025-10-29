@@ -233,7 +233,7 @@ CREATE POLICY "Users can insert EMI statuses for their loans"
       WHERE loans.id = emi_statuses.loan_id
       AND (loans.user_id = auth.uid() OR EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
     )
-  );
+  );    
 
 -- Create emi_status_audit table for tracking EMI status changes
 CREATE TABLE IF NOT EXISTS emi_status_audit (

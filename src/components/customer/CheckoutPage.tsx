@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useCart } from '../../contexts/CartContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase';
 export default function CheckoutPage() {
   const { items, subtotal, clear } = useCart();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
 
   const tax = Math.round(subtotal * 0.03);
@@ -30,8 +31,10 @@ export default function CheckoutPage() {
 
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
-  const [payType, setPayType] = useState<'online' | 'emi' | 'loan' | null>('online');
-  const [onlineMethod, setOnlineMethod] = useState<'card' | 'upi' | 'netbanking' | 'wallet' | null>('card');
+  const initialPay = (location.state as any)?.payType as 'online' | 'emi' | 'loan' | undefined;
+  const initialMethod = (location.state as any)?.onlineMethod as 'card' | 'upi' | 'netbanking' | 'wallet' | undefined;
+  const [payType, setPayType] = useState<'online' | 'emi' | 'loan' | null>(initialPay ?? 'online');
+  const [onlineMethod, setOnlineMethod] = useState<'card' | 'upi' | 'netbanking' | 'wallet' | null>(initialMethod ?? 'card');
   const addressSelected = Boolean(selectedAddressId);
   const paymentSelected = payType === 'online' ? Boolean(onlineMethod) : payType !== null;
 
@@ -128,11 +131,54 @@ export default function CheckoutPage() {
                   <span>Online</span>
                 </label>
                 {payType==='online' && (
-                  <div className="pl-6 grid grid-cols-2 gap-2 text-sm">
-                    <label className="flex items-center gap-2"><input type="radio" name="online" checked={onlineMethod==='card'} onChange={()=> setOnlineMethod('card')} /> Card</label>
-                    <label className="flex items-center gap-2"><input type="radio" name="online" checked={onlineMethod==='upi'} onChange={()=> setOnlineMethod('upi')} /> UPI</label>
-                    <label className="flex items-center gap-2"><input type="radio" name="online" checked={onlineMethod==='netbanking'} onChange={()=> setOnlineMethod('netbanking')} /> NetBanking</label>
-                    <label className="flex items-center gap-2"><input type="radio" name="online" checked={onlineMethod==='wallet'} onChange={()=> setOnlineMethod('wallet')} /> Wallet</label>
+                  <div className="pl-6 space-y-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+                      <label className="flex items-center gap-2"><input type="radio" name="online" checked={onlineMethod==='card'} onChange={()=> setOnlineMethod('card')} /> Card</label>
+                      <label className="flex items-center gap-2"><input type="radio" name="online" checked={onlineMethod==='upi'} onChange={()=> setOnlineMethod('upi')} /> UPI</label>
+                      <label className="flex items-center gap-2"><input type="radio" name="online" checked={onlineMethod==='netbanking'} onChange={()=> setOnlineMethod('netbanking')} /> NetBanking</label>
+                      <label className="flex items-center gap-2"><input type="radio" name="online" checked={onlineMethod==='wallet'} onChange={()=> setOnlineMethod('wallet')} /> Wallet</label>
+                    </div>
+
+                    {onlineMethod === 'upi' && (
+                      <div className="rounded-lg border p-3 bg-white dark:bg-gray-900">
+                        <div className="font-medium mb-2">Choose UPI App</div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {['Google Pay','PhonePe','Paytm','Amazon Pay','BHIM','Slice'].map(app => (
+                            <button key={app} type="button" className="px-3 py-2 rounded-lg border hover:bg-gray-50 text-sm">{app}</button>
+                          ))}
+                        </div>
+                        <p className="mt-2 text-xs text-gray-500">You will be redirected to your selected UPI app to complete the payment.</p>
+                      </div>
+                    )}
+
+                    {onlineMethod === 'netbanking' && (
+                      <div className="rounded-lg border p-3 bg-white dark:bg-gray-900">
+                        <div className="font-medium mb-2">Select Bank</div>
+                        <select className="w-full px-3 py-2 border rounded text-sm">
+                          {['SBI','HDFC Bank','ICICI Bank','Axis Bank','Kotak','Yes Bank','Union Bank'].map(b => (
+                            <option key={b}>{b}</option>
+                          ))}
+                        </select>
+                        <p className="mt-2 text-xs text-gray-500">You will be redirected to the bank to complete the payment.</p>
+                      </div>
+                    )}
+
+                    {onlineMethod === 'wallet' && (
+                      <div className="rounded-lg border p-3 bg-white dark:bg-gray-900">
+                        <div className="font-medium mb-2">Choose Wallet</div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {['Paytm','Amazon Pay','PhonePe','Mobikwik','Freecharge','Ola Money'].map(w => (
+                            <button key={w} type="button" className="px-3 py-2 rounded-lg border hover:bg-gray-50 text-sm">{w}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {onlineMethod === 'card' && (
+                      <div className="rounded-lg border p-3 bg-white dark:bg-gray-900">
+                        <div className="text-sm text-gray-600">Supports Visa, Mastercard, RuPay. (Demo UI only)</div>
+                      </div>
+                    )}
                   </div>
                 )}
                 <label className="flex items-center gap-2">

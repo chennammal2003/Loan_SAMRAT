@@ -29,6 +29,9 @@ import WishlistPage from './components/customer/WishlistPage';
 import CartPage from './components/customer/CartPage';
 import CheckoutPage from './components/customer/CheckoutPage';
 import ProductDetailPage from './components/customer/ProductDetailPage';
+import PaymentChoicePage from './components/customer/PaymentChoicePage';
+import FinanceTenurePage from './components/customer/FinanceTenurePage';
+import LoanApplyPage from './components/customer/LoanApplyPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -154,6 +157,9 @@ function App() {
               <Route path="cart" element={<CartPage /> } />
               <Route path="checkout" element={<CheckoutPage /> } />
               <Route path="product/:id" element={<ProductDetailPage /> } />
+              <Route path="payment-choice" element={<PaymentChoicePage /> } />
+              <Route path="finance-tenure" element={<FinanceTenurePage /> } />
+              <Route path="loan-apply" element={<LoanApplyPage /> } />
             </Route>
             <Route
               path="/dashboard/*"
