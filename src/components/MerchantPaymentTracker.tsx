@@ -33,10 +33,191 @@ export default function MerchantPaymentTracker() {
   const tableRef = useRef<HTMLDivElement | null>(null);
 
   const [selectedLoan, setSelectedLoan] = useState<LoanRow | null>(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exporting, setExporting] = useState<null | 'pdf' | 'excel'>(null);
 
   const applyFilterAndScroll = (status: 'ontrack' | 'overdue' | 'paid') => {
     setFilterStatus(status);
     setTimeout(() => tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+  };
+
+  const toCsv = (rows: (string | number)[][]) =>
+    rows
+      .map((r) =>
+        r
+          .map((c) => {
+            const v = c === null || c === undefined ? '' : String(c);
+            if (/[",\n]/.test(v)) return '"' + v.replace(/"/g, '""') + '"';
+            return v;
+          })
+          .join(',')
+      )
+      .join('\n');
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const computeEmi = (loanAmount: number, tenure: number) => {
+    const r = 0.36 / 12;
+    if (!loanAmount || !tenure) return 0;
+    const pow = Math.pow(1 + r, tenure);
+    return Math.round((loanAmount * r * pow) / (pow - 1));
+  };
+
+  const buildSchedule = (disbursedDate: string, tenure: number) => {
+    const result: { monthLabel: string; dueDate: Date }[] = [];
+    const start = disbursedDate ? new Date(disbursedDate) : new Date();
+    const dueDay = start.getDate();
+    const base = new Date(start.getFullYear(), start.getMonth(), dueDay);
+    for (let i = 0; i < tenure; i++) {
+      const y = base.getFullYear();
+      const m = base.getMonth() + i + 1;
+      const lastDay = new Date(y, m + 1, 0).getDate();
+      const day = Math.min(dueDay, lastDay);
+      const d = new Date(y, m, day);
+      result.push({ monthLabel: d.toLocaleString('en-US', { month: 'short' }), dueDate: d });
+    }
+    return result;
+  };
+
+  const fetchPopupRowsForLoan = async (loan: LoanRow) => {
+    const emi = computeEmi(loan.loanAmount, loan.tenure);
+    const schedule = buildSchedule(loan.disbursedDate, loan.tenure);
+    const { data, error } = await supabase
+      .from('payments')
+      .select('payment_date,total_paid')
+      .eq('loan_id', loan.id)
+      .order('payment_date', { ascending: true });
+    if (error) return schedule.map(() => ({ monthLabel: '-', amount: emi, status: 'Pending' }));
+    const payments = (data || []).map((p: any) => ({ date: new Date(p.payment_date), amount: Number(p.total_paid ?? 0) }));
+    const computed = schedule.map((slot) => {
+      const endOfMonth = new Date(slot.dueDate.getFullYear(), slot.dueDate.getMonth() + 1, 0, 23, 59, 59);
+      const paidThisCutoff = payments
+        .filter((p) => p.date.getTime() <= endOfMonth.getTime())
+        .reduce((s, p) => s + p.amount, 0);
+      const emisCovered = Math.floor(paidThisCutoff / Math.max(emi, 1));
+      const index = schedule.indexOf(slot);
+      const covered = emisCovered > index;
+      const status = covered ? 'Paid' : 'Pending';
+      return { monthLabel: slot.monthLabel, amount: emi, status };
+    });
+    try {
+      const { data: saved, error: sErr } = await supabase
+        .from('emi_statuses')
+        .select('installment_index,status')
+        .eq('loan_id', loan.id)
+        .order('installment_index');
+      if (!sErr && saved && saved.length > 0) {
+        return computed.map((r, i) => {
+          const row = (saved as any[]).find((s) => Number(s.installment_index) === i);
+          return row ? { ...r, status: row.status as any } : r;
+        });
+      }
+      return computed;
+    } catch {
+      return computed;
+    }
+  };
+
+  const handleExport = async (type: 'pdf' | 'excel') => {
+    setExporting(type);
+    setShowExportMenu(false);
+    try {
+      const now = new Date();
+      const ts = now.toISOString().replace(/[:T]/g, '-').split('.')[0];
+      const summaryHeader = ['Name', 'Application Number', 'Loan ID', 'Loan Amount', 'Tenure (months)', 'Paid/Total EMI', 'Remaining Amount', 'Status'];
+      const summaryRows = filteredLoans.map((l) => [
+        l.fullName,
+        l.applicationNumber || '-',
+        l.id,
+        `₹${l.loanAmount.toLocaleString('en-IN')}`,
+        String(l.tenure),
+        `${l.paymentsCompleted} / ${l.totalPayments}`,
+        `₹${l.remainingAmount.toLocaleString('en-IN')}`,
+        l.status,
+      ]);
+
+      const allDetailRows: { loan: LoanRow; rows: { monthLabel: string; amount: number; status: string }[] }[] = [];
+      for (const l of filteredLoans) {
+        const rows = await fetchPopupRowsForLoan(l);
+        allDetailRows.push({ loan: l, rows });
+      }
+
+      if (type === 'excel') {
+        const rows: (string | number)[][] = [];
+        for (const block of allDetailRows) {
+          const l = block.loan;
+          rows.push(['Name', 'Loan Amount', 'Tenure', 'Month', 'Amount', 'Status', 'Collected', 'Remaining']);
+          for (const r of block.rows) {
+            rows.push([
+              l.fullName,
+              Number(l.loanAmount || 0),
+              Number(l.tenure || 0),
+              r.monthLabel,
+              Number(r.amount || 0),
+              r.status,
+              Number(l.paidAmount || 0),
+              Number(l.remainingAmount || 0),
+            ]);
+          }
+          rows.push([]);
+        }
+        const blob = new Blob([toCsv(rows)], { type: 'text/csv;charset=utf-8;' });
+        downloadBlob(blob, `merchant-payment-tracker-${ts}.csv`);
+      } else {
+        const w = window.open('', '_blank');
+        if (!w) return;
+        const style = `
+          <style>
+            body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; padding: 24px; color: #111; }
+            h1 { margin: 0 0 8px 0; }
+            .muted { color: #555; margin-bottom: 16px; }
+            table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+            th, td { border: 1px solid #ccc; padding: 8px; font-size: 12px; text-align: left; }
+            th { background:#f5f5f5; }
+            .section { margin-top: 20px; }
+          </style>`;
+        const header = `<h1>Merchant Payment Tracker Export</h1><div class="muted">Generated at ${now.toLocaleString('en-IN')}</div>`;
+        const summaryTable = `
+          <table>
+            <thead><tr>${summaryHeader.map((h) => `<th>${h}</th>`).join('')}</tr></thead>
+            <tbody>
+              ${summaryRows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}
+            </tbody>
+          </table>`;
+        const detailsHtml = allDetailRows
+          .map(
+            (block) => `
+          <div class="section">
+            <div><strong>Application Number:</strong> ${block.loan.applicationNumber || '-'} &nbsp; <strong>Name:</strong> ${block.loan.fullName}</div>
+            <table>
+              <thead><tr><th>Month</th><th>Amount</th><th>Status</th></tr></thead>
+              <tbody>
+              ${block.rows
+                .map((r) => `<tr><td>${r.monthLabel}</td><td>₹${r.amount.toLocaleString('en-IN')}</td><td>${r.status}</td></tr>`)
+                .join('')}
+              </tbody>
+            </table>
+          </div>
+        `
+          )
+          .join('');
+        w.document.write(`<html><head><title>Merchant Payment Tracker</title>${style}</head><body>${header}${summaryTable}${detailsHtml}</body></html>`);
+        w.document.close();
+        w.focus();
+        w.print();
+      }
+    } finally {
+      setExporting(null);
+    }
   };
 
   useEffect(() => {
@@ -300,10 +481,32 @@ export default function MerchantPaymentTracker() {
                   <option value="paid">Paid</option>
                 </select>
               </div>
-              <button className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 font-medium">
-                <Download className="w-5 h-5" />
-                Export
-              </button>
+              <div className="relative">
+                <button
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 font-medium"
+                  onClick={() => setShowExportMenu((v) => !v)}
+                  disabled={exporting !== null}
+                >
+                  <Download className="w-5 h-5" />
+                  {exporting ? (exporting === 'excel' ? 'Exporting CSV...' : 'Preparing PDF...') : 'Export'}
+                </button>
+                {showExportMenu && (
+                  <div className="absolute right-0 mt-2 w-44 bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-lg shadow-lg z-10">
+                    <button
+                      className="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-gray-600"
+                      onClick={() => handleExport('excel')}
+                    >
+                      Excel (CSV)
+                    </button>
+                    <button
+                      className="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-gray-600"
+                      onClick={() => handleExport('pdf')}
+                    >
+                      PDF
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -316,7 +519,6 @@ export default function MerchantPaymentTracker() {
                 <tr>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Application ID</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Name</th>
-                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Loan ID</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Loan Amount</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Tenure</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Paid / Total EMI</th>
@@ -341,9 +543,6 @@ export default function MerchantPaymentTracker() {
                           <p className="font-medium text-slate-800 dark:text-white">{loan.fullName}</p>
                           <p className="text-sm text-slate-500 dark:text-gray-300">{loan.mobileNumber}</p>
                         </div>
-                      </td>
-                      <td className="py-4 px-6">
-                        <span className="font-semibold text-slate-800 dark:text-white">{loan.id}</span>
                       </td>
                       <td className="py-4 px-6">
                         <span className="font-semibold text-slate-800 dark:text-white">₹{loan.loanAmount.toLocaleString('en-IN')}</span>
@@ -389,7 +588,7 @@ export default function MerchantPaymentTracker() {
                 })}
                 {filteredLoans.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="py-8 text-center text-slate-600 dark:text-gray-300">No loans found</td>
+                    <td colSpan={8} className="py-8 text-center text-slate-600 dark:text-gray-300">No loans found</td>
                   </tr>
                 )}
               </tbody>

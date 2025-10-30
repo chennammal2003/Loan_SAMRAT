@@ -472,7 +472,7 @@ export default function LoanDetailsModal({ loan, onClose, showActions, onAccept,
                 onClick={() => setOpenDisburse(true)}
                 className="px-4 py-2 rounded text-white bg-purple-600 hover:bg-purple-700"
               >
-                Loan Disbursed
+                Loan Disburse
               </button>
             )}
           </div>

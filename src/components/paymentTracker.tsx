@@ -485,7 +485,6 @@ const PaymentTracker: React.FC = () => {
                 <tr>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Name</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Application Number</th>
-                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Loan ID</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Loan Amount</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Tenure</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Paid / Total EMI</th>
@@ -509,9 +508,6 @@ const PaymentTracker: React.FC = () => {
                       </td>
                       <td className="py-4 px-6">
                         <span className="font-semibold text-slate-800 dark:text-white">{loan.applicationNumber}</span>
-                      </td>
-                      <td className="py-4 px-6">
-                        <span className="font-semibold text-slate-800 dark:text-white">{loan.id}</span>
                       </td>
                       <td className="py-4 px-6">
                         <span className="font-semibold text-slate-800 dark:text-white">₹{loan.loanAmount.toLocaleString('en-IN')}</span>

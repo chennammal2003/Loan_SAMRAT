@@ -9,10 +9,9 @@ import DisbursedLoans from './DisbursedLoans';
 import MerchantDetails from './MerchantDetails';
 import DashboardStats from './DashboardStats';
 import PaymentTracker from './paymentTracker';
-import UsersAdmin from './admin/UsersAdmin';
 import ProductsAdmin from './admin/ProductsAdmin';
 
-type ActiveTab = 'home' | 'manage' | 'accepted' | 'disbursed' | 'payments' | 'merchants' | 'users' | 'products';
+type ActiveTab = 'home' | 'manage' | 'accepted' | 'disbursed' | 'payments' | 'merchants' | 'products';
 
 export default function AdminDashboard() {
   const { profile, signOut } = useAuth();
@@ -59,17 +58,7 @@ export default function AdminDashboard() {
             <span>Dashboard</span>
           </button>
 
-          <button
-            onClick={() => setActiveTab('users')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-              activeTab === 'users'
-                ? 'bg-orange-600 text-white'
-                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-            }`}
-          >
-            <Users className="w-5 h-5" />
-            <span>Users</span>
-          </button>
+          
 
           <button
             onClick={() => setActiveTab('products')}
@@ -172,7 +161,6 @@ export default function AdminDashboard() {
           <div className="px-8 py-4 flex justify-between items-center">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
               {activeTab === 'home' && 'Dashboard'}
-              {activeTab === 'users' && 'Users'}
               {activeTab === 'products' && 'Products'}
               {activeTab === 'manage' && 'Manage Loans'}
               {activeTab === 'accepted' && 'Accepted Loans'}
@@ -198,7 +186,6 @@ export default function AdminDashboard() {
               }}
             />
           )}
-          {activeTab === 'users' && <UsersAdmin />}
           {activeTab === 'products' && <ProductsAdmin />}
           {activeTab === 'manage' && <ManageLoans initialStatusFilter={manageInitialFilter} />}
           {activeTab === 'accepted' && <AcceptedLoans />}
