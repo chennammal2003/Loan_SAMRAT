@@ -4,8 +4,13 @@ import { fetchMetalRates, type MetalRates } from '../lib/metals';
 export default function LiveMetalRates() {
   const [rates, setRates] = useState<MetalRates | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const hasApiKey = Boolean((import.meta as any).env?.VITE_METALPRICE_API_KEY);
 
   useEffect(() => {
+    if (!hasApiKey) {
+      // Do not attempt to fetch without API key
+      return;
+    }
     const ctrl = new AbortController();
     const load = async () => {
       try {
@@ -22,18 +27,14 @@ export default function LiveMetalRates() {
       ctrl.abort();
       clearInterval(id);
     };
-  }, []);
+  }, [hasApiKey]);
 
-  if (error) {
-    return (
-      <div className="text-xs text-red-600 dark:text-red-400">{error}</div>
-    );
+  if (!hasApiKey || error) {
+    return null;
   }
 
   if (!rates) {
-    return (
-      <div className="text-xs text-gray-500 dark:text-gray-400">Loading metal rates…</div>
-    );
+    return null;
   }
 
   const g24 = rates.perGram.gold24k;
