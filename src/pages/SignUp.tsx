@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
+import { Moon, Sun, UserPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { UserPlus, Moon, Sun } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 export default function SignUp() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
+  const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState<'merchant' | 'admin' | 'customer'>('merchant');
@@ -22,7 +23,7 @@ export default function SignUp() {
     setError('');
     setSuccess('');
 
-    if (!username || !email || !password || !confirmPassword) {
+    if (!username || !email || !mobile || !password || !confirmPassword) {
       setError('Please fill in all fields');
       return;
     }
@@ -34,6 +35,11 @@ export default function SignUp() {
 
     if (!/\S+@\S+\.\S+/.test(email)) {
       setError('Please enter a valid email address');
+      return;
+    }
+
+    if (!/^\d{10}$/.test(mobile.trim())) {
+      setError('Please enter a valid 10-digit mobile number');
       return;
     }
 
@@ -49,7 +55,7 @@ export default function SignUp() {
 
     setLoading(true);
     try {
-      await signUp(username, email, password, role);
+      await signUp(username, email, password, role, mobile.trim());
       setSuccess('Account created successfully! Redirecting to sign in...');
       setTimeout(() => navigate('/signin'), 2000);
     } catch (err: any) {
@@ -116,6 +122,24 @@ export default function SignUp() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="merchant@example.com"
+              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="mobile" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Mobile Number
+            </label>
+            <input
+              id="mobile"
+              type="tel"
+              inputMode="numeric"
+              pattern="^[0-9]{10}$"
+              maxLength={10}
+              autoComplete="tel"
+              value={mobile}
+              onChange={(e) => setMobile(e.target.value.replace(/[^0-9]/g, ''))}
+              placeholder="10-digit mobile number"
               className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
             />
           </div>
