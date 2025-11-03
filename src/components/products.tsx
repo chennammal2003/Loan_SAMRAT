@@ -18,6 +18,12 @@ interface ProductFormData {
   imageUrl: string;
   image: File | null;
   makingCharge: string;
+  color: string;
+  dimensions: string;
+  warranty: string;
+  sku: string;
+  tags: string;
+  shippingCharge: string;
 }
 
 interface ProductRecord {
@@ -36,6 +42,12 @@ interface ProductRecord {
   discount_percent?: number | null;
   stock_qty?: number | null;
   created_at?: string;
+  color?: string | null;
+  dimensions?: string | null;
+  warranty?: string | null;
+  sku?: string | null;
+  tags?: string | null; // comma separated
+  shipping_charge?: number | null;
 }
 
 export default function Product() {
@@ -72,6 +84,12 @@ export default function Product() {
     imageUrl: '',
     image: null,
     makingCharge: '',
+    color: '',
+    dimensions: '',
+    warranty: '',
+    sku: '',
+    tags: '',
+    shippingCharge: '',
   });
 
   const purityOptions = useMemo(() => {
@@ -131,6 +149,12 @@ export default function Product() {
       imageUrl: '',
       image: null,
       makingCharge: '',
+      color: '',
+      dimensions: '',
+      warranty: '',
+      sku: '',
+      tags: '',
+      shippingCharge: '',
     });
   };
 
@@ -183,6 +207,12 @@ export default function Product() {
       imageUrl: p.image_url ?? '',
       image: null,
       makingCharge: '',
+      color: p.color ?? '',
+      dimensions: p.dimensions ?? '',
+      warranty: p.warranty ?? '',
+      sku: p.sku ?? '',
+      tags: p.tags ?? '',
+      shippingCharge: p.shipping_charge != null ? String(p.shipping_charge) : '',
     });
     setIsModalOpen(true);
   };
@@ -238,6 +268,7 @@ export default function Product() {
       const weightNumber = formData.weight ? Number(formData.weight) : null;
       const discountNumber = formData.discountPercent ? Number(formData.discountPercent) : null;
       const stockQtyNumber = formData.stockQty ? Number(formData.stockQty) : null;
+      const shippingNumber = formData.shippingCharge ? Number(formData.shippingCharge) : null;
 
       if (editingProduct) {
         let image_path = editingProduct.image_path;
@@ -270,6 +301,12 @@ export default function Product() {
             gemstone: formData.gemstone || null,
             discount_percent: discountNumber,
             stock_qty: stockQtyNumber,
+            color: formData.color || null,
+            dimensions: formData.dimensions || null,
+            warranty: formData.warranty || null,
+            sku: formData.sku || null,
+            tags: formData.tags || null,
+            shipping_charge: shippingNumber,
           })
           .eq('id', editingProduct.id)
           .eq('merchant_id', user.id)
@@ -307,6 +344,12 @@ export default function Product() {
             gemstone: formData.gemstone || null,
             discount_percent: discountNumber,
             stock_qty: stockQtyNumber,
+            color: formData.color || null,
+            dimensions: formData.dimensions || null,
+            warranty: formData.warranty || null,
+            sku: formData.sku || null,
+            tags: formData.tags || null,
+            shipping_charge: shippingNumber,
           })
           .select()
           .single();
@@ -721,6 +764,50 @@ export default function Product() {
                       </div>
                     )}
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {viewingProduct.color && (
+                      <div className="bg-slate-50 dark:bg-gray-900/50 rounded-xl p-4">
+                        <div className="text-sm text-slate-600 dark:text-gray-400 mb-1">Color</div>
+                        <div className="font-semibold text-slate-900 dark:text-white">{viewingProduct.color}</div>
+                      </div>
+                    )}
+                    {viewingProduct.dimensions && (
+                      <div className="bg-slate-50 dark:bg-gray-900/50 rounded-xl p-4">
+                        <div className="text-sm text-slate-600 dark:text-gray-400 mb-1">Dimensions</div>
+                        <div className="font-semibold text-slate-900 dark:text-white">{viewingProduct.dimensions}</div>
+                      </div>
+                    )}
+                    {viewingProduct.warranty && (
+                      <div className="bg-slate-50 dark:bg-gray-900/50 rounded-xl p-4">
+                        <div className="text-sm text-slate-600 dark:text-gray-400 mb-1">Warranty</div>
+                        <div className="font-semibold text-slate-900 dark:text-white">{viewingProduct.warranty}</div>
+                      </div>
+                    )}
+                    {viewingProduct.sku && (
+                      <div className="bg-slate-50 dark:bg-gray-900/50 rounded-xl p-4">
+                        <div className="text-sm text-slate-600 dark:text-gray-400 mb-1">SKU</div>
+                        <div className="font-semibold text-slate-900 dark:text-white">{viewingProduct.sku}</div>
+                      </div>
+                    )}
+                    {viewingProduct.tags && (
+                      <div className="bg-slate-50 dark:bg-gray-900/50 rounded-xl p-4 col-span-2">
+                        <div className="text-sm text-slate-600 dark:text-gray-400 mb-2">Tags</div>
+                        <div className="flex flex-wrap gap-2">
+                          {viewingProduct.tags.split(',').map((t) => (
+                            <span key={t.trim()} className="text-xs bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-gray-300 px-2 py-1 rounded-lg font-medium">
+                              {t.trim()}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {viewingProduct.shipping_charge != null && (
+                      <div className="bg-slate-50 dark:bg-gray-900/50 rounded-xl p-4 col-span-2">
+                        <div className="text-sm text-slate-600 dark:text-gray-400 mb-1">Shipping Charge</div>
+                        <div className="font-semibold text-slate-900 dark:text-white">₹{Number(viewingProduct.shipping_charge).toLocaleString('en-IN')}</div>
+                      </div>
+                    )}
+                  </div>
 
                   <div className="flex gap-3 pt-4">
                     <button
@@ -909,6 +996,73 @@ export default function Product() {
                       <option>Sapphire</option>
                     </select>
                   </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="color" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Color</label>
+                      <input
+                        id="color"
+                        name="color"
+                        type="text"
+                        value={formData.color}
+                        onChange={handleInputChange}
+                        placeholder="e.g., Yellow Gold"
+                        className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="dimensions" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Dimensions</label>
+                      <input
+                        id="dimensions"
+                        name="dimensions"
+                        type="text"
+                        value={formData.dimensions}
+                        onChange={handleInputChange}
+                        placeholder="e.g., 20mm x 15mm"
+                        className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="warranty" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Warranty</label>
+                      <input
+                        id="warranty"
+                        name="warranty"
+                        type="text"
+                        value={formData.warranty}
+                        onChange={handleInputChange}
+                        placeholder="e.g., 1 year"
+                        className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="sku" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">SKU</label>
+                      <input
+                        id="sku"
+                        name="sku"
+                        type="text"
+                        value={formData.sku}
+                        onChange={handleInputChange}
+                        placeholder="Internal SKU"
+                        className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="tags" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Tags</label>
+                    <input
+                      id="tags"
+                      name="tags"
+                      type="text"
+                      value={formData.tags}
+                      onChange={handleInputChange}
+                      placeholder="Comma-separated, e.g., bridal,lightweight"
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                    />
+                  </div>
                 </div>
               )}
 
@@ -1051,6 +1205,21 @@ export default function Product() {
                         placeholder="e.g., 10"
                       />
                     </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="shippingCharge" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Shipping Charge (₹)</label>
+                    <input
+                      type="number"
+                      id="shippingCharge"
+                      name="shippingCharge"
+                      value={formData.shippingCharge}
+                      onChange={handleInputChange}
+                      min="0"
+                      step="0.01"
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                      placeholder="e.g., 99"
+                    />
                   </div>
                 </div>
               )}
