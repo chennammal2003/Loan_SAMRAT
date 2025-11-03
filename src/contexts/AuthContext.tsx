@@ -60,9 +60,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!data) {
         console.error('No profile found for user:', userId);
-      }
+        // Attempt to create profile now that we have an authenticated session
+        const { data: userRes } = await supabase.auth.getUser();
+        const authUser = userRes?.user || null;
+        if (authUser) {
+          const usernameFromMeta = (authUser.user_metadata as any)?.username as string | undefined;
+          const roleFromMeta = (authUser.user_metadata as any)?.role as 'merchant' | 'admin' | 'customer' | undefined;
+          const emailFromAuth = authUser.email ?? '';
+          const derivedUsername = usernameFromMeta || (emailFromAuth ? emailFromAuth.split('@')[0] : 'user');
 
-      setProfile(data);
+          const { error: upsertErr } = await supabase
+            .from('user_profiles')
+            .upsert(
+              {
+                id: userId,
+                username: derivedUsername,
+                email: emailFromAuth,
+                role: (roleFromMeta ?? 'customer'),
+              },
+              { onConflict: 'id' }
+            );
+
+          if (!upsertErr) {
+            const { data: refetched } = await supabase
+              .from('user_profiles')
+              .select('*')
+              .eq('id', userId)
+              .maybeSingle();
+            if (refetched) {
+              setProfile(refetched);
+              return;
+            }
+          } else {
+            console.error('Profile upsert error:', upsertErr);
+          }
+        }
+      } else {
+        setProfile(data);
+      }
     } catch (error) {
       console.error('Error fetching profile:', error);
       setProfile(null);
@@ -98,18 +133,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (authError) throw authError;
     if (!authData.user) throw new Error('User creation failed');
 
-    const { error: profileError } = await supabase
-      .from('user_profiles')
-      .insert({
-        id: authData.user.id,
-        username,
-        email,
-        role,
-      });
+    // Insert profile only if a session exists (e.g., email auto-confirm enabled)
+    if (authData.session) {
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .insert({
+          id: authData.user.id,
+          username,
+          email,
+          role,
+        });
 
-    if (profileError) {
-      console.error('Profile creation error:', profileError);
-      throw new Error(`Failed to create user profile: ${profileError.message}`);
+      if (profileError) {
+        console.error('Profile creation error:', profileError);
+        throw new Error(`Failed to create user profile: ${profileError.message}`);
+      }
     }
   };
 
