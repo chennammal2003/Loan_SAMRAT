@@ -24,6 +24,56 @@ interface ProductFormData {
   sku: string;
   tags: string;
   shippingCharge: string;
+  // A. Making & Delivery
+  makingTime: string;
+  deliveryTime: string;
+  // B. Certification
+  hallmarkCertNumber: string;
+  bisHallmarkType: string;
+  // C. Weight Breakdown
+  netWeight: string;
+  stoneWeight: string;
+  wastageWeight: string;
+  // D. Stone Details
+  stoneType: string;
+  stoneCount: string;
+  stoneClarity: string;
+  stoneCut: string;
+  stoneSettingType: string;
+  // E. Size & Measurements
+  ringSize: string;
+  chainLength: string;
+  bangleSize: string;
+  // F. Design Type
+  designType: string; // Traditional, Modern, ...
+  // G. Occasion
+  occasion: string; // Wedding, Engagement, ...
+  // H. Metal Finish
+  metalFinish: string; // Yellow Gold, White Gold, ...
+  // I. Weight Type
+  weightType: string; // Gross/Net
+  // J. Gender
+  gender: string; // Men/Women/Unisex/Kids
+  // K. Return Policy
+  returnAllowed: string; // Yes/No
+  returnPeriod: string; // text/number of days
+  // L. Certification Upload
+  certificateUrl: string;
+  certificateFile: File | null;
+  // M. Customization
+  customizable: string; // Yes/No
+  customMessage: string;
+  // N. Making Type
+  makingType: string; // Handmade/Machine-made/Casting
+  // O. Packaging
+  packaging: string; // Premium Box/Standard Box/Gift Pouch
+  // P. Product Video
+  productVideoUrl: string;
+  productVideoFile: File | null;
+  // Q. Care Instructions
+  careInstructions: string;
+  // R. Availability
+  availability: string; // Ready Stock/Made on Order
 }
 
 interface ProductRecord {
@@ -48,7 +98,37 @@ interface ProductRecord {
   sku?: string | null;
   tags?: string | null; // comma separated
   shipping_charge?: number | null;
+  making_time?: string | null;
+  delivery_time?: string | null;
+  hallmark_cert_number?: string | null;
+  bis_hallmark_type?: string | null;
+  net_weight?: number | null;
+  stone_weight?: number | null;
+  wastage_weight?: number | null;
+  stone_type?: string | null;
+  stone_count?: number | null;
+  stone_clarity?: string | null;
+  stone_cut?: string | null;
+  stone_setting_type?: string | null;
+  ring_size?: string | null;
+  chain_length?: string | null;
+  bangle_size?: string | null;
+  design_type?: string | null;
+  occasion?: string | null;
+  metal_finish?: string | null;
+  weight_type?: string | null;
+  gender?: string | null;
+  return_allowed?: boolean | null;
+  return_period?: string | null;
+  certificate_url?: string | null;
+  making_type?: string | null;
+  packaging?: string | null;
+  product_video_url?: string | null;
+  care_instructions?: string | null;
+  availability?: string | null;
 }
+
+type ProductsSubTab = 'list' | 'stock' | 'variantStock';
 
 export default function Product() {
   const { user } = useAuth();
@@ -56,9 +136,12 @@ export default function Product() {
   const [submitting, setSubmitting] = useState(false);
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [editingProduct, setEditingProduct] = useState<ProductRecord | null>(null);
   const [viewingProduct, setViewingProduct] = useState<ProductRecord | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProductRecord | null>(null);
+  const [activeTab, setActiveTab] = useState<ProductsSubTab>('list');
+  const [stockEdits, setStockEdits] = useState<Record<string, string>>({});
   // Filters state (client-side only)
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
@@ -90,6 +173,38 @@ export default function Product() {
     sku: '',
     tags: '',
     shippingCharge: '',
+    makingTime: '',
+    deliveryTime: '',
+    hallmarkCertNumber: '',
+    bisHallmarkType: '',
+    netWeight: '',
+    stoneWeight: '',
+    wastageWeight: '',
+    stoneType: '',
+    stoneCount: '',
+    stoneClarity: '',
+    stoneCut: '',
+    stoneSettingType: '',
+    ringSize: '',
+    chainLength: '',
+    bangleSize: '',
+    designType: '',
+    occasion: '',
+    metalFinish: '',
+    weightType: '',
+    gender: '',
+    returnAllowed: 'No',
+    returnPeriod: '',
+    certificateUrl: '',
+    certificateFile: null,
+    customizable: 'No',
+    customMessage: '',
+    makingType: '',
+    packaging: '',
+    productVideoUrl: '',
+    productVideoFile: null,
+    careInstructions: '',
+    availability: '',
   });
 
   const purityOptions = useMemo(() => {
@@ -126,6 +241,15 @@ export default function Product() {
     })();
   }, [user]);
 
+  // Reflect product list into inline stock edit buffer whenever products change
+  useEffect(() => {
+    const next: Record<string, string> = {};
+    for (const p of products) {
+      next[p.id] = p.stock_qty != null ? String(p.stock_qty) : '';
+    }
+    setStockEdits(next);
+  }, [products]);
+
   const handleOpenModal = () => {
     setIsModalOpen(true);
     setCurrentStep(0);
@@ -155,6 +279,38 @@ export default function Product() {
       sku: '',
       tags: '',
       shippingCharge: '',
+      makingTime: '',
+      deliveryTime: '',
+      hallmarkCertNumber: '',
+      bisHallmarkType: '',
+      netWeight: '',
+      stoneWeight: '',
+      wastageWeight: '',
+      stoneType: '',
+      stoneCount: '',
+      stoneClarity: '',
+      stoneCut: '',
+      stoneSettingType: '',
+      ringSize: '',
+      chainLength: '',
+      bangleSize: '',
+      designType: '',
+      occasion: '',
+      metalFinish: '',
+      weightType: '',
+      gender: '',
+      returnAllowed: 'No',
+      returnPeriod: '',
+      certificateUrl: '',
+      certificateFile: null,
+      customizable: 'No',
+      customMessage: '',
+      makingType: '',
+      packaging: '',
+      productVideoUrl: '',
+      productVideoFile: null,
+      careInstructions: '',
+      availability: '',
     });
   };
 
@@ -177,6 +333,16 @@ export default function Product() {
     }));
   };
 
+  const handleCertificateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setFormData((prev) => ({ ...prev, certificateFile: file }));
+  };
+
+  const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setFormData((prev) => ({ ...prev, productVideoFile: file }));
+  };
+
   const uploadImage = async (file: File, ownerId: string) => {
     const fileName = `${crypto.randomUUID()}-${file.name.replace(/\s+/g, '-')}`;
     const image_path = `${ownerId}/${fileName}`;
@@ -189,6 +355,20 @@ export default function Product() {
       .getPublicUrl(image_path);
     const image_url = publicUrl.publicUrl;
     return { image_path, image_url } as const;
+  };
+
+  const uploadFileToBucket = async (bucket: string, file: File, ownerId: string) => {
+    const fileName = `${crypto.randomUUID()}-${file.name.replace(/\s+/g, '-')}`;
+    const file_path = `${ownerId}/${fileName}`;
+    const { error: uploadError } = await supabase.storage
+      .from(bucket)
+      .upload(file_path, file, { upsert: false });
+    if (uploadError) throw uploadError;
+    const { data: publicUrl } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(file_path);
+    const url = publicUrl.publicUrl;
+    return { file_path, url } as const;
   };
 
   const handleEditOpen = (p: ProductRecord) => {
@@ -213,6 +393,38 @@ export default function Product() {
       sku: p.sku ?? '',
       tags: p.tags ?? '',
       shippingCharge: p.shipping_charge != null ? String(p.shipping_charge) : '',
+      makingTime: p.making_time ?? '',
+      deliveryTime: p.delivery_time ?? '',
+      hallmarkCertNumber: p.hallmark_cert_number ?? '',
+      bisHallmarkType: p.bis_hallmark_type ?? '',
+      netWeight: p.net_weight != null ? String(p.net_weight) : '',
+      stoneWeight: p.stone_weight != null ? String(p.stone_weight) : '',
+      wastageWeight: p.wastage_weight != null ? String(p.wastage_weight) : '',
+      stoneType: p.stone_type ?? '',
+      stoneCount: p.stone_count != null ? String(p.stone_count) : '',
+      stoneClarity: p.stone_clarity ?? '',
+      stoneCut: p.stone_cut ?? '',
+      stoneSettingType: p.stone_setting_type ?? '',
+      ringSize: p.ring_size ?? '',
+      chainLength: p.chain_length ?? '',
+      bangleSize: p.bangle_size ?? '',
+      designType: p.design_type ?? '',
+      occasion: p.occasion ?? '',
+      metalFinish: p.metal_finish ?? '',
+      weightType: p.weight_type ?? '',
+      gender: p.gender ?? '',
+      returnAllowed: p.return_allowed ? 'Yes' : 'No',
+      returnPeriod: p.return_period ?? '',
+      certificateUrl: p.certificate_url ?? '',
+      certificateFile: null,
+      customizable: 'No',
+      customMessage: '',
+      makingType: p.making_type ?? '',
+      packaging: p.packaging ?? '',
+      productVideoUrl: p.product_video_url ?? '',
+      productVideoFile: null,
+      careInstructions: p.care_instructions ?? '',
+      availability: p.availability ?? '',
     });
     setIsModalOpen(true);
   };
@@ -269,10 +481,16 @@ export default function Product() {
       const discountNumber = formData.discountPercent ? Number(formData.discountPercent) : null;
       const stockQtyNumber = formData.stockQty ? Number(formData.stockQty) : null;
       const shippingNumber = formData.shippingCharge ? Number(formData.shippingCharge) : null;
+      const netWeightNumber = formData.netWeight ? Number(formData.netWeight) : null;
+      const stoneWeightNumber = formData.stoneWeight ? Number(formData.stoneWeight) : null;
+      const wastageWeightNumber = formData.wastageWeight ? Number(formData.wastageWeight) : null;
+      const stoneCountNumber = formData.stoneCount ? Number(formData.stoneCount) : null;
 
       if (editingProduct) {
         let image_path = editingProduct.image_path;
         let image_url = editingProduct.image_url;
+        let certificate_url = editingProduct.certificate_url ?? null;
+        let product_video_url = editingProduct.product_video_url ?? null;
 
         if (formData.image) {
           if (image_path) {
@@ -284,6 +502,20 @@ export default function Product() {
         } else if (formData.imageUrl) {
           image_url = formData.imageUrl;
           image_path = editingProduct.image_path ?? null;
+        }
+
+        if (formData.certificateFile) {
+          const uploaded = await uploadFileToBucket('product-certificates', formData.certificateFile, user.id);
+          certificate_url = uploaded.url;
+        } else if (formData.certificateUrl) {
+          certificate_url = formData.certificateUrl;
+        }
+
+        if (formData.productVideoFile) {
+          const uploaded = await uploadFileToBucket('product-videos', formData.productVideoFile, user.id);
+          product_video_url = uploaded.url;
+        } else if (formData.productVideoUrl) {
+          product_video_url = formData.productVideoUrl;
         }
 
         const { data, error: updError } = await supabase
@@ -307,6 +539,34 @@ export default function Product() {
             sku: formData.sku || null,
             tags: formData.tags || null,
             shipping_charge: shippingNumber,
+            making_time: formData.makingTime || null,
+            delivery_time: formData.deliveryTime || null,
+            hallmark_cert_number: formData.hallmarkCertNumber || null,
+            bis_hallmark_type: formData.bisHallmarkType || null,
+            net_weight: netWeightNumber,
+            stone_weight: stoneWeightNumber,
+            wastage_weight: wastageWeightNumber,
+            stone_type: formData.stoneType || null,
+            stone_count: stoneCountNumber,
+            stone_clarity: formData.stoneClarity || null,
+            stone_cut: formData.stoneCut || null,
+            stone_setting_type: formData.stoneSettingType || null,
+            ring_size: formData.ringSize || null,
+            chain_length: formData.chainLength || null,
+            bangle_size: formData.bangleSize || null,
+            design_type: formData.designType || null,
+            occasion: formData.occasion || null,
+            metal_finish: formData.metalFinish || null,
+            weight_type: formData.weightType || null,
+            gender: formData.gender || null,
+            return_allowed: formData.returnAllowed.toLowerCase() === 'yes',
+            return_period: formData.returnPeriod || null,
+            certificate_url: certificate_url,
+            making_type: formData.makingType || null,
+            packaging: formData.packaging || null,
+            product_video_url: product_video_url,
+            care_instructions: formData.careInstructions || null,
+            availability: formData.availability || null,
           })
           .eq('id', editingProduct.id)
           .eq('merchant_id', user.id)
@@ -319,6 +579,8 @@ export default function Product() {
       } else {
         let image_path: string | null = null;
         let image_url: string | null = null;
+        let certificate_url: string | null = null;
+        let product_video_url: string | null = null;
 
         if (formData.image) {
           const uploaded = await uploadImage(formData.image, user.id);
@@ -326,6 +588,20 @@ export default function Product() {
           image_url = uploaded.image_url;
         } else if (formData.imageUrl) {
           image_url = formData.imageUrl;
+        }
+
+        if (formData.certificateFile) {
+          const uploaded = await uploadFileToBucket('product-certificates', formData.certificateFile, user.id);
+          certificate_url = uploaded.url;
+        } else if (formData.certificateUrl) {
+          certificate_url = formData.certificateUrl;
+        }
+
+        if (formData.productVideoFile) {
+          const uploaded = await uploadFileToBucket('product-videos', formData.productVideoFile, user.id);
+          product_video_url = uploaded.url;
+        } else if (formData.productVideoUrl) {
+          product_video_url = formData.productVideoUrl;
         }
 
         const { data, error: insertError } = await supabase
@@ -350,6 +626,34 @@ export default function Product() {
             sku: formData.sku || null,
             tags: formData.tags || null,
             shipping_charge: shippingNumber,
+            making_time: formData.makingTime || null,
+            delivery_time: formData.deliveryTime || null,
+            hallmark_cert_number: formData.hallmarkCertNumber || null,
+            bis_hallmark_type: formData.bisHallmarkType || null,
+            net_weight: netWeightNumber,
+            stone_weight: stoneWeightNumber,
+            wastage_weight: wastageWeightNumber,
+            stone_type: formData.stoneType || null,
+            stone_count: stoneCountNumber,
+            stone_clarity: formData.stoneClarity || null,
+            stone_cut: formData.stoneCut || null,
+            stone_setting_type: formData.stoneSettingType || null,
+            ring_size: formData.ringSize || null,
+            chain_length: formData.chainLength || null,
+            bangle_size: formData.bangleSize || null,
+            design_type: formData.designType || null,
+            occasion: formData.occasion || null,
+            metal_finish: formData.metalFinish || null,
+            weight_type: formData.weightType || null,
+            gender: formData.gender || null,
+            return_allowed: formData.returnAllowed.toLowerCase() === 'yes',
+            return_period: formData.returnPeriod || null,
+            certificate_url: certificate_url,
+            making_type: formData.makingType || null,
+            packaging: formData.packaging || null,
+            product_video_url: product_video_url,
+            care_instructions: formData.careInstructions || null,
+            availability: formData.availability || null,
           })
           .select()
           .single();
@@ -374,7 +678,7 @@ export default function Product() {
   return (
     <div className="min-h-full bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex justify-between items-center mb-10 animate-fade-in">
+        <div className="flex justify-between items-center mb-6 animate-fade-in">
           <div>
             <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-2">Products</h1>
             <p className="text-slate-600 dark:text-gray-400">Manage your jewelry collection</p>
@@ -388,7 +692,41 @@ export default function Product() {
           </button>
         </div>
 
-        {/* Filters Bar */}
+        {/* Sub-tabs */}
+        <div className="mb-8 flex flex-wrap gap-2">
+          <button
+            onClick={() => setActiveTab('list')}
+            className={`px-4 py-2 rounded-lg border ${
+              activeTab === 'list'
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white dark:bg-gray-900 text-slate-700 dark:text-gray-200 border-slate-300 dark:border-gray-700'
+            }`}
+          >
+            Product List
+          </button>
+          <button
+            onClick={() => setActiveTab('stock')}
+            className={`px-4 py-2 rounded-lg border ${
+              activeTab === 'stock'
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white dark:bg-gray-900 text-slate-700 dark:text-gray-200 border-slate-300 dark:border-gray-700'
+            }`}
+          >
+            Stock Update
+          </button>
+          <button
+            onClick={() => setActiveTab('variantStock')}
+            className={`px-4 py-2 rounded-lg border ${
+              activeTab === 'variantStock'
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white dark:bg-gray-900 text-slate-700 dark:text-gray-200 border-slate-300 dark:border-gray-700'
+            }`}
+          >
+            Variant Stock Update
+          </button>
+        </div>
+
+        {activeTab === 'list' && (
         <div className="mb-8 grid grid-cols-1 lg:grid-cols-12 gap-3 animate-fade-in">
           <div className="lg:col-span-3">
             <input
@@ -496,12 +834,16 @@ export default function Product() {
             </button>
           </div>
         </div>
+        )}
 
         {error && (
           <div className="mb-6 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3 rounded-xl animate-slide-up">{error}</div>
         )}
+        {info && (
+          <div className="mb-6 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 px-4 py-3 rounded-xl animate-slide-up">{info}</div>
+        )}
 
-        {products.length === 0 ? (
+        {activeTab === 'list' && (products.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-12 border border-slate-200 dark:border-gray-700 text-center animate-fade-in">
             <div className="w-20 h-20 bg-slate-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
               <Package className="w-10 h-10 text-slate-400 dark:text-gray-400" />
@@ -646,6 +988,106 @@ export default function Product() {
                 </div>
               </div>
             ))}
+          </div>
+        ))}
+
+        {activeTab === 'stock' && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-gray-700 font-semibold">Update Stock</div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200 dark:divide-gray-700">
+                <thead className="bg-slate-50 dark:bg-gray-900">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-gray-400 uppercase tracking-wider">Product</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-gray-400 uppercase tracking-wider">Current</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-gray-400 uppercase tracking-wider">New Stock</th>
+                    <th className="px-6 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-slate-200 dark:divide-gray-700">
+                  {products.map((p) => {
+                    const current = p.stock_qty ?? 0;
+                    const inputVal = stockEdits[p.id] ?? '';
+                    const hasChange = inputVal !== (p.stock_qty != null ? String(p.stock_qty) : '');
+                    return (
+                      <tr key={p.id}>
+                        <td className="px-6 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-100 dark:bg-gray-700 flex items-center justify-center">
+                              {p.image_url ? (
+                                <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <Package className="w-6 h-6 text-slate-400" />
+                              )}
+                            </div>
+                            <div>
+                              <div className="font-medium text-slate-900 dark:text-white">{p.name}</div>
+                              {p.sku && <div className="text-xs text-slate-500 dark:text-gray-400">SKU: {p.sku}</div>}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-3 text-slate-700 dark:text-gray-200">{current}</td>
+                        <td className="px-6 py-3">
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={inputVal}
+                            onChange={(e) => setStockEdits((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                            className="w-28 px-3 py-2 rounded-lg border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100"
+                          />
+                        </td>
+                        <td className="px-6 py-3 text-right">
+                          <button
+                            disabled={!hasChange}
+                            onClick={async () => {
+                              if (!user) return;
+                              setError(null);
+                              setInfo(null);
+                              const nextVal = stockEdits[p.id];
+                              const parsed = nextVal === '' ? null : Number(nextVal);
+                              try {
+                                const { data, error } = await supabase
+                                  .from('products')
+                                  .update({ stock_qty: parsed })
+                                  .eq('id', p.id)
+                                  .eq('merchant_id', user.id)
+                                  .select()
+                                  .single();
+                                if (error) throw error;
+                                setProducts((prev) => prev.map((it) => (it.id === p.id ? (data as ProductRecord) : it)));
+                                setInfo('Stock updated');
+                              } catch (e: any) {
+                                const msg = e?.message || 'Failed to update stock';
+                                setError(msg);
+                              }
+                            }}
+                            className={`px-4 py-2 rounded-lg font-medium ${
+                              hasChange
+                                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                : 'bg-slate-200 dark:bg-gray-700 text-slate-500 dark:text-gray-400 cursor-not-allowed'
+                            }`}
+                          >
+                            Save
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'variantStock' && (
+          <div className="rounded-2xl border border-slate-200 dark:border-gray-700 p-6 bg-white dark:bg-gray-800">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Variant Stock Update</h3>
+            <p className="text-slate-600 dark:text-gray-300">
+              Variants are not defined in the current schema. If you plan to manage
+              sizes, colors, or other options per product, we can add a
+              `product_variants` table and wire editing here.
+            </p>
           </div>
         )}
       </div>
@@ -1063,6 +1505,148 @@ export default function Product() {
                       className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
                     />
                   </div>
+
+                  {/* A. Making & Delivery */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Making Time</label>
+                      <input name="makingTime" value={formData.makingTime} onChange={handleInputChange} placeholder="e.g., 7 days" className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Delivery Time</label>
+                      <input name="deliveryTime" value={formData.deliveryTime} onChange={handleInputChange} placeholder="e.g., 3-5 days" className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    </div>
+                  </div>
+
+                  {/* B. Certification */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Hallmark Certification Number</label>
+                      <input name="hallmarkCertNumber" value={formData.hallmarkCertNumber} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">BIS Hallmark Type</label>
+                      <input name="bisHallmarkType" value={formData.bisHallmarkType} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    </div>
+                  </div>
+
+                  {/* C. Weight Breakdown */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Net Weight (g)</label>
+                      <input type="number" step="0.01" min="0" name="netWeight" value={formData.netWeight} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Stone Weight (g)</label>
+                      <input type="number" step="0.01" min="0" name="stoneWeight" value={formData.stoneWeight} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Wastage Weight (g)</label>
+                      <input type="number" step="0.01" min="0" name="wastageWeight" value={formData.wastageWeight} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    </div>
+                  </div>
+
+                  {/* D. Stone Details */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Stone Type</label>
+                      <input name="stoneType" value={formData.stoneType} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Stone Count</label>
+                      <input type="number" min="0" step="1" name="stoneCount" value={formData.stoneCount} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Stone Clarity</label>
+                      <input name="stoneClarity" value={formData.stoneClarity} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Stone Cut</label>
+                      <input name="stoneCut" value={formData.stoneCut} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Stone Setting Type</label>
+                      <input name="stoneSettingType" value={formData.stoneSettingType} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    </div>
+                  </div>
+
+                  {/* E. Size & Measurements */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Ring Size</label>
+                      <input name="ringSize" value={formData.ringSize} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Chain Length</label>
+                      <input name="chainLength" value={formData.chainLength} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Bangle Size</label>
+                      <input name="bangleSize" value={formData.bangleSize} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    </div>
+                  </div>
+
+                  {/* F, G, H selections */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Design Type</label>
+                      <select name="designType" value={formData.designType} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl"><option value="">Select</option><option>Traditional</option><option>Modern</option><option>Antique</option><option>Temple</option><option>Daily Wear</option></select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Occasion</label>
+                      <select name="occasion" value={formData.occasion} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl"><option value="">Select</option><option>Wedding</option><option>Engagement</option><option>Casual</option><option>Festival</option><option>Gift</option></select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Metal Finish</label>
+                      <select name="metalFinish" value={formData.metalFinish} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl"><option value="">Select</option><option>Yellow Gold</option><option>White Gold</option><option>Rose Gold</option><option>Oxidised Silver</option></select>
+                    </div>
+                  </div>
+
+                  {/* I. Weight Type & J. Gender */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Weight Type</label>
+                      <select name="weightType" value={formData.weightType} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl"><option value="">Select</option><option>Gross Weight</option><option>Net Weight</option></select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Gender</label>
+                      <select name="gender" value={formData.gender} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl"><option value="">Select</option><option>Men</option><option>Women</option><option>Unisex</option><option>Kids</option></select>
+                    </div>
+                  </div>
+
+                  {/* K. Return Policy & M. Customization */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Return Allowed</label>
+                      <select name="returnAllowed" value={formData.returnAllowed} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl"><option>No</option><option>Yes</option></select>
+                      <input placeholder="Return Period (e.g., 7 days)" name="returnPeriod" value={formData.returnPeriod} onChange={handleInputChange} className="mt-2 w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Customizable</label>
+                      <select name="customizable" value={formData.customizable} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl"><option>No</option><option>Yes</option></select>
+                      <input placeholder="Custom Message/Engraving" name="customMessage" value={formData.customMessage} onChange={handleInputChange} className="mt-2 w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    </div>
+                  </div>
+
+                  {/* N. Making Type, O. Packaging, Q. Care, R. Availability */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Making Type</label>
+                      <select name="makingType" value={formData.makingType} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl"><option value="">Select</option><option>Handmade</option><option>Machine-made</option><option>Casting</option></select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Packaging</label>
+                      <select name="packaging" value={formData.packaging} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl"><option value="">Select</option><option>Premium Box</option><option>Standard Box</option><option>Gift Pouch</option></select>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Care Instructions</label>
+                      <textarea name="careInstructions" value={formData.careInstructions} onChange={handleInputChange} rows={3} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Availability</label>
+                      <select name="availability" value={formData.availability} onChange={handleInputChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl"><option value="">Select</option><option>Ready Stock</option><option>Made on Order</option></select>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1090,6 +1674,16 @@ export default function Product() {
                       accept="image/*"
                       className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Upload Certificate (PDF/Image)</label>
+                    <input type="file" accept="image/*,application/pdf" onChange={handleCertificateChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    <input type="url" placeholder="Or certificate URL" value={formData.certificateUrl} onChange={(e) => setFormData((p) => ({ ...p, certificateUrl: e.target.value }))} className="mt-2 w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Upload Video (optional)</label>
+                    <input type="file" accept="video/*" onChange={handleVideoChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    <input type="url" placeholder="Or video URL" value={formData.productVideoUrl} onChange={(e) => setFormData((p) => ({ ...p, productVideoUrl: e.target.value }))} className="mt-2 w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
                   </div>
                 </div>
               )}
