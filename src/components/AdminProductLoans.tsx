@@ -1,0 +1,744 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Eye, Download, Copy, Mail, Phone, Edit3 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+
+interface ProductLoan {
+  id: string;
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  email_id: string;
+  mobile_primary: string;
+  mobile_alternative?: string;
+  address: string;
+  loan_amount: number;
+  tenure: number;
+  processing_fee: number;
+  status: string;
+  product_id?: string;
+  product_name: string;
+  product_image_url: string;
+  product_price: number;
+  product_category?: string;
+  merchant_id?: string;
+  created_at: string;
+  updated_at: string;
+  application_number?: string;
+}
+
+interface ProductLoanRow extends ProductLoan {
+  product?: {
+    id: string;
+    name: string;
+    price: number;
+    image_url: string;
+    sku: string | null;
+  };
+  merchant_name?: string;
+}
+
+export default function AdminProductLoans() {
+  const [loans, setLoans] = useState<ProductLoanRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedLoan, setSelectedLoan] = useState<ProductLoanRow | null>(null);
+  const [statusChangeLoan, setStatusChangeLoan] = useState<ProductLoanRow | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+
+  useEffect(() => {
+    fetchLoans();
+  }, []);
+
+  useEffect(() => {
+    const ch = supabase
+      .channel('product-loans-admin')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'product_loans' }, () => fetchLoans())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'product_loans' }, () => fetchLoans())
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'product_loans' }, () => fetchLoans())
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, []);
+
+  const fetchLoans = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch all product loans
+      const { data: productLoansData, error: productLoansError } = await supabase
+        .from('product_loans')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (productLoansError) throw productLoansError;
+
+      // Fetch products for additional info (SKU, etc.)
+      const productIds = productLoansData?.filter(pl => pl.product_id).map(pl => pl.product_id) || [];
+      let productsData = null;
+      if (productIds.length > 0) {
+        const result = await supabase
+          .from('products')
+          .select('id, name, price, image_url, sku')
+          .in('id', productIds);
+        productsData = result.data;
+      }
+
+      // Fetch merchant profiles for merchant names
+      const merchantIds = productLoansData?.filter(pl => pl.merchant_id).map(pl => pl.merchant_id) || [];
+      let merchantsData = null;
+      if (merchantIds.length > 0) {
+        const result = await supabase
+          .from('user_profiles')
+          .select('id, username, email, full_name')
+          .in('id', merchantIds);
+        merchantsData = result.data;
+      }
+
+      // Build product map
+      const productMap = new Map<string, { id: string; name: string; price: number; image_url: string; sku: string | null }>();
+      productsData?.forEach(p => {
+        productMap.set(p.id, {
+          id: p.id,
+          name: p.name,
+          price: p.price || 0,
+          image_url: p.image_url || '',
+          sku: p.sku
+        });
+      });
+
+      // Build merchant map
+      const merchantMap = new Map<string, string>();
+      merchantsData?.forEach(m => {
+        merchantMap.set(m.id, m.username || m.full_name || m.email || 'Unknown');
+      });
+
+      // Enrich product loans with product and merchant info
+      const enrichedLoans: ProductLoanRow[] = productLoansData?.map(loan => {
+        const product = loan.product_id && productMap.has(loan.product_id)
+          ? productMap.get(loan.product_id)
+          : undefined;
+        
+        const merchantName = loan.merchant_id && merchantMap.has(loan.merchant_id)
+          ? merchantMap.get(loan.merchant_id)
+          : undefined;
+
+        return {
+          ...loan,
+          product,
+          merchant_name: merchantName
+        };
+      }) || [];
+
+      setLoans(enrichedLoans);
+    } catch (error) {
+      console.error('Error fetching product loans:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredLoans = useMemo(() => {
+    let filtered = loans;
+    
+    if (statusFilter !== 'All') {
+      filtered = filtered.filter(l => l.status === statusFilter);
+    }
+    
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      filtered = filtered.filter(l => 
+        `${l.first_name} ${l.last_name}`.toLowerCase().includes(q) ||
+        l.email_id.toLowerCase().includes(q) ||
+        l.mobile_primary.includes(q) ||
+        l.id.toLowerCase().includes(q) ||
+        l.product_name.toLowerCase().includes(q) ||
+        l.merchant_name?.toLowerCase().includes(q)
+      );
+    }
+    
+    return filtered;
+  }, [loans, search, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredLoans.length / pageSize));
+  const start = (page - 1) * pageSize;
+  const end = start + pageSize;
+  const pageItems = filteredLoans.slice(start, end);
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'Pending':
+        return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400';
+      case 'Verified':
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
+      case 'Accepted':
+        return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+      case 'Rejected':
+        return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
+      case 'Loan Disbursed':
+      case 'Disbursed':
+        return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400';
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400';
+    }
+  };
+
+  const formatLoanId = (id: string) => {
+    return `LOAN-${id.substring(0, 8)}`;
+  };
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
+
+  const handleExportCSV = () => {
+    const rows = selectedRows.size > 0 
+      ? filteredLoans.filter(l => selectedRows.has(l.id))
+      : filteredLoans;
+    
+    const headers = [
+      'Loan ID', 'Applied At', 'Status', 'Applicant Full Name', 'Email', 'Mobile',
+      'Product ID', 'Product Name', 'Product Price', 'Loan Amount', 'Tenure (months)',
+      'Processing Fee', 'Merchant ID', 'Merchant Name'
+    ];
+    
+    const escape = (v: any) => {
+      const s = v === null || v === undefined ? '' : String(v);
+      const needsQuotes = /[",\n]/.test(s);
+      const t = s.replace(/\"/g, '""');
+      return needsQuotes ? `"${t}"` : t;
+    };
+    
+    const lines = [headers.join(',')];
+    rows.forEach(l => {
+      const line = [
+        escape(formatLoanId(l.id)),
+        escape(new Date(l.created_at).toLocaleString()),
+        escape(l.status),
+        escape(`${l.first_name} ${l.last_name}`),
+        escape(l.email_id),
+        escape(l.mobile_primary),
+        escape(l.product_id || ''),
+        escape(l.product_name || ''),
+        escape(l.product_price || ''),
+        escape(l.loan_amount),
+        escape(l.tenure),
+        escape(l.processing_fee),
+        escape(l.merchant_id || ''),
+        escape(l.merchant_name || '')
+      ].join(',');
+      lines.push(line);
+    });
+    
+    const blob = new Blob(["\uFEFF" + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const now = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    a.download = `Product_Loans_${now}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const toggleRowSelection = (loanId: string) => {
+    setSelectedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(loanId)) {
+        next.delete(loanId);
+      } else {
+        next.add(loanId);
+      }
+      return next;
+    });
+  };
+
+  const toggleAllSelection = () => {
+    if (selectedRows.size === pageItems.length) {
+      setSelectedRows(new Set());
+    } else {
+      setSelectedRows(new Set(pageItems.map(l => l.id)));
+    }
+  };
+
+  const handleStatusChange = async (loanId: string, newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from('product_loans')
+        .update({ 
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', loanId);
+
+      if (error) throw error;
+
+      setLoans(prev => prev.map(l => l.id === loanId ? { ...l, status: newStatus } : l));
+      setStatusChangeLoan(null);
+    } catch (error) {
+      console.error('Error updating status:', error);
+      alert('Failed to update status. Please try again.');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex-1 flex flex-col sm:flex-row gap-4">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, email, mobile, loan ID, product..."
+            className="flex-1 px-4 py-2 border border-slate-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+          />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-4 py-2 border border-slate-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+          >
+            <option value="All">All Status</option>
+            <option value="Pending">Pending</option>
+            <option value="Verified">Verified</option>
+            <option value="Accepted">Accepted</option>
+            <option value="Rejected">Rejected</option>
+            <option value="Loan Disbursed">Disbursed</option>
+          </select>
+        </div>
+        <button
+          onClick={handleExportCSV}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+        >
+          <Download size={18} />
+          Export CSV
+        </button>
+      </div>
+
+      {filteredLoans.length === 0 ? (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-12 text-center">
+          <p className="text-slate-600 dark:text-gray-400">No product loans found. Try adjusting your filters.</p>
+        </div>
+      ) : (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th className="px-4 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={selectedRows.size === pageItems.length && pageItems.length > 0}
+                      onChange={toggleAllSelection}
+                      className="rounded border-slate-300"
+                    />
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Loan ID</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Product</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Applicant Name</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Email</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Mobile</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Loan Amount</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Tenure</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Processing Fee</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Status</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Merchant</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Applied At</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {pageItems.map((loan) => (
+                  <tr
+                    key={loan.id}
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                  >
+                    <td className="px-4 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedRows.has(loan.id)}
+                        onChange={() => toggleRowSelection(loan.id)}
+                        className="rounded border-slate-300"
+                      />
+                    </td>
+                    <td className="px-6 py-4">
+                      <button
+                        onClick={() => setSelectedLoan(loan)}
+                        className="text-blue-600 dark:text-blue-400 hover:underline font-mono text-sm"
+                      >
+                        {formatLoanId(loan.id)}
+                      </button>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={loan.product_image_url || loan.product?.image_url || '/placeholder-product.png'}
+                          alt={loan.product_name}
+                          className="w-10 h-10 rounded object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/placeholder-product.png';
+                          }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-slate-900 dark:text-white truncate" title={loan.product_name}>
+                            {loan.product_name}
+                          </p>
+                          {loan.product?.sku && (
+                            <p className="text-xs text-slate-500 dark:text-gray-400">SKU: {loan.product.sku}</p>
+                          )}
+                          {loan.product_price && (
+                            <p className="text-xs text-slate-500 dark:text-gray-400">
+                              Price: ₹{loan.product_price.toLocaleString('en-IN')}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <button
+                        onClick={() => setSelectedLoan(loan)}
+                        className="text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400"
+                      >
+                        {loan.first_name} {loan.last_name}
+                      </button>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-900 dark:text-white">{loan.email_id}</span>
+                        <button
+                          onClick={() => handleCopy(loan.email_id)}
+                          className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400"
+                          title="Copy email"
+                        >
+                          <Copy size={14} />
+                        </button>
+                        <a
+                          href={`mailto:${loan.email_id}`}
+                          className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400"
+                          title="Send email"
+                        >
+                          <Mail size={14} />
+                        </a>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-900 dark:text-white">{loan.mobile_primary}</span>
+                        <a
+                          href={`tel:${loan.mobile_primary}`}
+                          className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400"
+                          title="Call"
+                        >
+                          <Phone size={14} />
+                        </a>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="font-semibold text-slate-900 dark:text-white">
+                        ₹{loan.loan_amount.toLocaleString('en-IN')}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-slate-700 dark:text-gray-300">{loan.tenure} months</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-slate-700 dark:text-gray-300">
+                        ₹{loan.processing_fee.toLocaleString('en-IN')}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <button
+                        onClick={() => setStatusChangeLoan(loan)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(loan.status)}`}
+                      >
+                        {loan.status}
+                      </button>
+                    </td>
+                    <td className="px-6 py-4">
+                      {loan.merchant_name ? (
+                        <div>
+                          <p className="text-slate-900 dark:text-white font-medium">{loan.merchant_name}</p>
+                          {loan.merchant_id && (
+                            <p className="text-xs text-slate-500 dark:text-gray-400">ID: {loan.merchant_id.substring(0, 8)}...</p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 dark:text-gray-500">N/A</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-slate-700 dark:text-gray-300">
+                        {new Date(loan.created_at).toLocaleString('en-IN')}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setSelectedLoan(loan)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                          title="View Details"
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <button
+                          onClick={() => setStatusChangeLoan(loan)}
+                          className="p-2 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
+                          title="Change Status"
+                        >
+                          <Edit3 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {totalPages > 1 && (
+            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
+              <div className="text-sm text-slate-600 dark:text-gray-400">
+                Showing {start + 1} to {Math.min(end, filteredLoans.length)} of {filteredLoans.length} loans
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage(prev => Math.max(1, prev - 1))}
+                  disabled={page === 1}
+                  className="px-4 py-2 border border-slate-300 dark:border-gray-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <span className="px-4 py-2 text-slate-700 dark:text-gray-300">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={page === totalPages}
+                  className="px-4 py-2 border border-slate-300 dark:border-gray-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {selectedLoan && (
+        <ProductLoanDetailsModal
+          loan={selectedLoan}
+          onClose={() => setSelectedLoan(null)}
+        />
+      )}
+
+      {statusChangeLoan && (
+        <ProductLoanStatusModal
+          loan={statusChangeLoan}
+          onClose={() => setStatusChangeLoan(null)}
+          onStatusChange={handleStatusChange}
+        />
+      )}
+    </div>
+  );
+}
+
+// Product Loan Details Modal
+function ProductLoanDetailsModal({ loan, onClose }: { loan: ProductLoanRow; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center p-6 border-b border-slate-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Product Loan Details</h2>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+          >
+            <Eye size={24} className="rotate-180" />
+          </button>
+        </div>
+        <div className="p-6 space-y-6">
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <h3 className="font-semibold text-slate-900 dark:text-white mb-3">Applicant Information</h3>
+              <div className="space-y-2 text-sm">
+                <p><span className="text-slate-600 dark:text-gray-400">Name:</span> <span className="font-medium">{loan.first_name} {loan.last_name}</span></p>
+                <p><span className="text-slate-600 dark:text-gray-400">Email:</span> <span className="font-medium">{loan.email_id}</span></p>
+                <p><span className="text-slate-600 dark:text-gray-400">Mobile:</span> <span className="font-medium">{loan.mobile_primary}</span></p>
+                <p><span className="text-slate-600 dark:text-gray-400">Address:</span> <span className="font-medium">{loan.address}</span></p>
+              </div>
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900 dark:text-white mb-3">Loan Information</h3>
+              <div className="space-y-2 text-sm">
+                <p><span className="text-slate-600 dark:text-gray-400">Loan Amount:</span> <span className="font-medium">₹{loan.loan_amount.toLocaleString('en-IN')}</span></p>
+                <p><span className="text-slate-600 dark:text-gray-400">Tenure:</span> <span className="font-medium">{loan.tenure} months</span></p>
+                <p><span className="text-slate-600 dark:text-gray-400">Processing Fee:</span> <span className="font-medium">₹{loan.processing_fee.toLocaleString('en-IN')}</span></p>
+                <p><span className="text-slate-600 dark:text-gray-400">Status:</span> <span className="font-medium">{loan.status}</span></p>
+              </div>
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900 dark:text-white mb-3">Product Information</h3>
+              <div className="space-y-2 text-sm">
+                <p><span className="text-slate-600 dark:text-gray-400">Product:</span> <span className="font-medium">{loan.product_name}</span></p>
+                <p><span className="text-slate-600 dark:text-gray-400">Price:</span> <span className="font-medium">₹{loan.product_price.toLocaleString('en-IN')}</span></p>
+                {loan.product_category && (
+                  <p><span className="text-slate-600 dark:text-gray-400">Category:</span> <span className="font-medium">{loan.product_category}</span></p>
+                )}
+              </div>
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900 dark:text-white mb-3">Timeline</h3>
+              <div className="space-y-2 text-sm">
+                <p><span className="text-slate-600 dark:text-gray-400">Applied At:</span> <span className="font-medium">{new Date(loan.created_at).toLocaleString('en-IN')}</span></p>
+                <p><span className="text-slate-600 dark:text-gray-400">Last Updated:</span> <span className="font-medium">{new Date(loan.updated_at).toLocaleString('en-IN')}</span></p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="p-6 border-t border-slate-200 dark:border-gray-700 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Product Loan Status Change Modal
+function ProductLoanStatusModal({ 
+  loan, 
+  onClose, 
+  onStatusChange 
+}: { 
+  loan: ProductLoanRow; 
+  onClose: () => void;
+  onStatusChange: (loanId: string, newStatus: string) => void;
+}) {
+  const [selectedStatus, setSelectedStatus] = useState<string>(loan.status);
+  const [comment, setComment] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (selectedStatus === loan.status) {
+      onClose();
+      return;
+    }
+
+    setSaving(true);
+    try {
+      onStatusChange(loan.id, selectedStatus);
+      onClose();
+    } catch (error) {
+      console.error('Error updating status:', error);
+      alert('Failed to update status. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full animate-slide-up">
+        <div className="flex justify-between items-center p-6 border-b border-slate-200 dark:border-gray-700">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Change Loan Status</h2>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+          >
+            <Edit3 size={24} className="rotate-45" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">
+              Loan ID
+            </label>
+            <p className="text-sm text-slate-600 dark:text-gray-400 font-mono">
+              {loan.id.substring(0, 8)}...
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">
+              Applicant
+            </label>
+            <p className="text-sm text-slate-600 dark:text-gray-400">
+              {loan.first_name} {loan.last_name}
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">
+              Current Status
+            </label>
+            <p className="text-sm text-slate-600 dark:text-gray-400">{loan.status}</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">
+              New Status
+            </label>
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="w-full px-4 py-2 border border-slate-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            >
+              <option value="Pending">Pending</option>
+              <option value="Verified">Verified</option>
+              <option value="Accepted">Accepted</option>
+              <option value="Rejected">Rejected</option>
+              <option value="Loan Disbursed">Loan Disbursed</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">
+              Comment (Optional)
+            </label>
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Add a comment about this status change..."
+              rows={3}
+              className="w-full px-4 py-2 border border-slate-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 p-6 border-t border-slate-200 dark:border-gray-700">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-slate-300 dark:border-gray-700 rounded-lg text-slate-700 dark:text-gray-300 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors"
+            disabled={saving}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <Edit3 size={16} />
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

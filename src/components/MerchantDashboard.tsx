@@ -14,8 +14,9 @@ import MerchantPaymentTracker from './MerchantPaymentTracker';
 import LiveMetalRates from './LiveMetalRates';
 import ShareLinkPanel from './ShareLinkPanel';
 import MerchantOrders from './merchant/MerchantOrders';
+import MerchantProductLoans from './MerchantProductLoans';
 
-type ActiveTab = 'home' | 'apply' | 'loans' | 'disbursed' | 'paymentTracker' | 'products' | 'share' | 'orders';
+type ActiveTab = 'home' | 'apply' | 'loans' | 'disbursed' | 'paymentTracker' | 'products' | 'share' | 'orders' | 'productLoans';
 
 export default function MerchantDashboard() {
   const { profile, signOut } = useAuth();
@@ -42,7 +43,7 @@ export default function MerchantDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
-      <aside className="w-64 bg-white dark:bg-gray-800 shadow-lg sticky top-0 h-screen flex flex-col overflow-hidden">
+      <aside className="w-64 bg-white dark:bg-gray-800 shadow-lg sticky top-0 h-screen flex flex-col overflow-auto">
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
@@ -133,6 +134,18 @@ export default function MerchantDashboard() {
           </button>
 
           <button
+            onClick={() => setActiveTab('productLoans')}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+              activeTab === 'productLoans'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            <FileText className="w-5 h-5" />
+            <span>Product Loans</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('orders')}
             className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
               activeTab === 'orders'
@@ -184,6 +197,7 @@ export default function MerchantDashboard() {
               {activeTab === 'disbursed' && 'My Disbursed Loans'}
               {activeTab === 'paymentTracker' && 'My Payment Tracker'}
               {activeTab === 'products' && 'Products'}
+              {activeTab === 'productLoans' && 'Product Loans'}
               {activeTab === 'share' && 'Share Apply Link'}
               {activeTab === 'orders' && 'Orders'}
             </h1>
@@ -218,6 +232,11 @@ export default function MerchantDashboard() {
           {activeTab === 'products' && (
             <div className="space-y-6">
               <Product />
+            </div>
+          )}
+          {activeTab === 'productLoans' && (
+            <div className="space-y-6">
+              <MerchantProductLoans />
             </div>
           )}
           {activeTab === 'share' && (

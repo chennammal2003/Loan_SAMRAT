@@ -19,6 +19,8 @@ import MerchantDetails from './components/MerchantDetails';
 import MerchantDashboard from './components/MerchantDashboard';
 import PageShell from './components/PageShell';
 import Product from './components/products';
+import AdminProductLoans from './components/AdminProductLoans';
+import MerchantProductLoans from './components/MerchantProductLoans';
 import StorePage from './components/StorePage';
 import CustomerHome from './components/customer/CustomerHome';
 import CustomerOrders from './components/customer/CustomerOrders';
@@ -141,11 +143,13 @@ function App() {
             <Route path="/admin/disbursed" element={<AdminRoute><PageShell><DisbursedLoans /></PageShell></AdminRoute>} />
             <Route path="/admin/payments" element={<AdminRoute><PageShell><MerchantPaymentTracker /></PageShell></AdminRoute>} />
             <Route path="/admin/merchants" element={<AdminRoute><PageShell><MerchantDetails /></PageShell></AdminRoute>} />
+            <Route path="/admin/product-loans" element={<AdminRoute><PageShell><AdminProductLoans /></PageShell></AdminRoute>} />
             {/* Merchant standalone pages (no dashboard shell) */}
             <Route path="/loans" element={<MerchantRoute><PageShell><LoanDetails /></PageShell></MerchantRoute>} />
             <Route path="/disbursed" element={<MerchantRoute><PageShell><MerchantDisbursedLoans /></PageShell></MerchantRoute>} />
             <Route path="/payments" element={<MerchantRoute><PageShell><MerchantPaymentTracker /></PageShell></MerchantRoute>} />
             <Route path="/products" element={<MerchantRoute><PageShell><Product /></PageShell></MerchantRoute>} />
+            <Route path="/merchant/product-loans" element={<MerchantRoute><PageShell><MerchantProductLoans /></PageShell></MerchantRoute>} />
             {/* Customer area with shared shell/header */}
             <Route path="/customer" element={<CustomerRoute><CustomerShell /></CustomerRoute>}>
               <Route index element={<StorePage />} />
