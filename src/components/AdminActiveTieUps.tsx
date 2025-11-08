@@ -4,9 +4,6 @@ import { useAuth } from '../contexts/AuthContext';
 
 interface Row {
   merchant_id: string;
-  interest_rate: number | null;
-  duration_months: number | null;
-  terms_text: string | null;
   created_at: string;
   merchant?: { username?: string|null } | null;
 }
@@ -17,7 +14,7 @@ export default function AdminActiveTieUps() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewId, setViewId] = useState<string | null>(null);
-  const [merchantMap, setMerchantMap] = useState<Record<string, { business_name?: string|null; owner_name?: string|null; email?: string|null; phone?: string|null }>>({});
+  const [merchantMap, setMerchantMap] = useState<Record<string, { business_name?: string|null; owner_name?: string|null; email?: string|null; phone?: string|null; address?: string|null; age?: number|null; business_type?: string|null; business_category?: string|null; gst_number?: string|null; pan_number?: string|null; bank_name?: string|null; account_number?: string|null; ifsc_code?: string|null; upi_id?: string|null }>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -26,7 +23,7 @@ export default function AdminActiveTieUps() {
       try {
         const { data, error } = await supabase
           .from('nbfc_tieups')
-          .select('merchant_id,interest_rate,duration_months,terms_text,created_at, merchant:user_profiles!nbfc_tieups_merchant_id_fkey(username)')
+          .select('merchant_id,created_at, merchant:user_profiles!nbfc_tieups_merchant_id_fkey(username)')
           .eq('admin_id', profile.id)
           .order('created_at', { ascending: false });
         if (error) throw error;
@@ -38,10 +35,10 @@ export default function AdminActiveTieUps() {
           if (ids.length) {
             const { data: mrows } = await supabase
               .from('merchant_profiles')
-              .select('merchant_id,business_name,owner_name,email,phone')
+              .select('merchant_id,business_name,owner_name,email,phone,address,age,business_type,business_category,gst_number,pan_number,bank_name,account_number,ifsc_code,upi_id')
               .in('merchant_id', ids);
             const map: Record<string, any> = {};
-            (mrows || []).forEach((m: any) => { map[m.merchant_id] = { business_name: m.business_name, owner_name: m.owner_name, email: m.email, phone: m.phone }; });
+            (mrows || []).forEach((m: any) => { map[m.merchant_id] = { business_name: m.business_name, owner_name: m.owner_name, email: m.email, phone: m.phone, address: m.address, age: m.age, business_type: m.business_type, business_category: m.business_category, gst_number: m.gst_number, pan_number: m.pan_number, bank_name: m.bank_name, account_number: m.account_number, ifsc_code: m.ifsc_code, upi_id: m.upi_id }; });
             if (!cancelled) setMerchantMap(map);
           }
         } catch (_) {}
@@ -71,16 +68,16 @@ export default function AdminActiveTieUps() {
               <div className="text-xs text-gray-500">Approved on {new Date(r.created_at).toLocaleDateString()}</div>
               <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                 <div className="rounded bg-gray-50 dark:bg-gray-900 p-2 border border-gray-200 dark:border-gray-700">
-                  <div className="text-gray-500 dark:text-gray-400">Interest Rate</div>
-                  <div className="font-medium">{r.interest_rate != null ? `${r.interest_rate}% p.a` : '-'}</div>
+                  <div className="text-gray-500 dark:text-gray-400">Business</div>
+                  <div className="font-medium" title={merchantMap[r.merchant_id]?.business_name || ''}>{merchantMap[r.merchant_id]?.business_name || '-'}</div>
                 </div>
                 <div className="rounded bg-gray-50 dark:bg-gray-900 p-2 border border-gray-200 dark:border-gray-700">
-                  <div className="text-gray-500 dark:text-gray-400">Duration</div>
-                  <div className="font-medium">{r.duration_months != null ? `${r.duration_months} months` : '-'}</div>
+                  <div className="text-gray-500 dark:text-gray-400">Owner</div>
+                  <div className="font-medium">{merchantMap[r.merchant_id]?.owner_name || '-'}</div>
                 </div>
                 <div className="rounded bg-gray-50 dark:bg-gray-900 p-2 border border-gray-200 dark:border-gray-700">
-                  <div className="text-gray-500 dark:text-gray-400">Terms</div>
-                  <div className="font-medium truncate" title={r.terms_text || ''}>{r.terms_text || '-'}</div>
+                  <div className="text-gray-500 dark:text-gray-400">Email</div>
+                  <div className="font-medium truncate" title={merchantMap[r.merchant_id]?.email || ''}>{merchantMap[r.merchant_id]?.email || '-'}</div>
                 </div>
               </div>
             </div>
@@ -105,6 +102,16 @@ export default function AdminActiveTieUps() {
                 <tr><td className="py-1 pr-3 text-gray-500">Owner</td><td className="py-1 font-medium text-gray-900 dark:text-white">{merchantMap[viewId]?.owner_name || '-'}</td></tr>
                 <tr><td className="py-1 pr-3 text-gray-500">Email</td><td className="py-1 font-medium text-gray-900 dark:text-white">{merchantMap[viewId]?.email || '-'}</td></tr>
                 <tr><td className="py-1 pr-3 text-gray-500">Phone</td><td className="py-1 font-medium text-gray-900 dark:text-white">{merchantMap[viewId]?.phone || '-'}</td></tr>
+                <tr><td className="py-1 pr-3 text-gray-500">Address</td><td className="py-1 font-medium text-gray-900 dark:text-white">{merchantMap[viewId]?.address || '-'}</td></tr>
+                <tr><td className="py-1 pr-3 text-gray-500">Age</td><td className="py-1 font-medium text-gray-900 dark:text-white">{merchantMap[viewId]?.age ?? '-'}</td></tr>
+                <tr><td className="py-1 pr-3 text-gray-500">Business Type</td><td className="py-1 font-medium text-gray-900 dark:text-white">{merchantMap[viewId]?.business_type || '-'}</td></tr>
+                <tr><td className="py-1 pr-3 text-gray-500">Business Category</td><td className="py-1 font-medium text-gray-900 dark:text-white">{merchantMap[viewId]?.business_category || '-'}</td></tr>
+                <tr><td className="py-1 pr-3 text-gray-500">GST Number</td><td className="py-1 font-medium text-gray-900 dark:text-white">{merchantMap[viewId]?.gst_number || '-'}</td></tr>
+                <tr><td className="py-1 pr-3 text-gray-500">PAN Number</td><td className="py-1 font-medium text-gray-900 dark:text-white">{merchantMap[viewId]?.pan_number || '-'}</td></tr>
+                <tr><td className="py-1 pr-3 text-gray-500">Bank Name</td><td className="py-1 font-medium text-gray-900 dark:text-white">{merchantMap[viewId]?.bank_name || '-'}</td></tr>
+                <tr><td className="py-1 pr-3 text-gray-500">Account Number</td><td className="py-1 font-medium text-gray-900 dark:text-white">{merchantMap[viewId]?.account_number || '-'}</td></tr>
+                <tr><td className="py-1 pr-3 text-gray-500">IFSC Code</td><td className="py-1 font-medium text-gray-900 dark:text-white">{merchantMap[viewId]?.ifsc_code || '-'}</td></tr>
+                <tr><td className="py-1 pr-3 text-gray-500">UPI ID</td><td className="py-1 font-medium text-gray-900 dark:text-white">{merchantMap[viewId]?.upi_id || '-'}</td></tr>
               </tbody>
             </table>
           </div>

@@ -153,6 +153,9 @@ export default function Product() {
   const [rates, setRates] = useState<MetalRates | null>(null);
   const [ratesError, setRatesError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
+  // NBFC terms (from tie-up) to prefill interest and tenure
+  const [nbfcTerms, setNbfcTerms] = useState<{ interest_rate?: number | null; default_tenure?: number | null; processing_fee?: number | null; approval_type?: string | null; tenure_options?: number[] | null } | null>(null);
+  const [productFinance, setProductFinance] = useState<{ interest_rate: string; tenure: string }>({ interest_rate: '', tenure: '' });
   const [formData, setFormData] = useState<ProductFormData>({
     name: '',
     description: '',
@@ -241,6 +244,40 @@ export default function Product() {
     })();
   }, [user]);
 
+  // Load NBFC terms (interest_rate, default_tenure) from merchant's approved tie-up when modal opens
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!isModalOpen || !user) return;
+      try {
+        const { data: tie } = await supabase
+          .from('nbfc_tieups')
+          .select('nbfc:nbfc_profiles!nbfc_tieups_nbfc_id_fkey(interest_rate, default_tenure, processing_fee, approval_type, tenure_options)')
+          .eq('merchant_id', user.id)
+          .maybeSingle();
+        const nb = (tie?.nbfc as any) || {};
+        const interest = nb?.interest_rate ?? null;
+        const tenure = nb?.default_tenure ?? null;
+        const fee = nb?.processing_fee ?? null;
+        const appr = nb?.approval_type ?? null;
+        const optsRaw = nb?.tenure_options ?? [];
+        const opts: number[] = Array.isArray(optsRaw) ? optsRaw.map((x: any) => Number(x)).filter((n: any) => Number.isFinite(n) && n > 0) : [];
+        if (!cancelled) {
+          setNbfcTerms({ interest_rate: interest, default_tenure: tenure, processing_fee: fee, approval_type: appr, tenure_options: opts.length ? opts : null });
+          setProductFinance({
+            interest_rate: interest != null ? String(interest) : '',
+            tenure: tenure != null ? String(tenure) : '',
+          });
+        }
+      } catch (_) {
+        if (!cancelled) {
+          setNbfcTerms({ interest_rate: null, default_tenure: null, processing_fee: null, approval_type: null, tenure_options: null });
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isModalOpen, user?.id]);
+
   // Reflect product list into inline stock edit buffer whenever products change
   useEffect(() => {
     const next: Record<string, string> = {};
@@ -253,12 +290,15 @@ export default function Product() {
   const handleOpenModal = () => {
     setIsModalOpen(true);
     setCurrentStep(0);
+    // Reset finance fields; they'll be refilled by NBFC terms effect
+    setProductFinance({ interest_rate: '', tenure: '' });
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingProduct(null);
     setCurrentStep(0);
+    setProductFinance({ interest_rate: '', tenure: '' });
     setFormData({
       name: '',
       description: '',
@@ -518,63 +558,88 @@ export default function Product() {
           product_video_url = formData.productVideoUrl;
         }
 
-        const { data, error: updError } = await supabase
-          .from('products')
-          .update({
-            name: formData.name,
-            description: formData.description,
-            price: priceNumber,
-            image_path,
-            image_url,
-            category: formData.category || null,
-            purity: formData.purity || null,
-            weight: weightNumber,
-            metal_type: formData.metalType || null,
-            gemstone: formData.gemstone || null,
-            discount_percent: discountNumber,
-            stock_qty: stockQtyNumber,
-            color: formData.color || null,
-            dimensions: formData.dimensions || null,
-            warranty: formData.warranty || null,
-            sku: formData.sku || null,
-            tags: formData.tags || null,
-            shipping_charge: shippingNumber,
-            making_time: formData.makingTime || null,
-            delivery_time: formData.deliveryTime || null,
-            hallmark_cert_number: formData.hallmarkCertNumber || null,
-            bis_hallmark_type: formData.bisHallmarkType || null,
-            net_weight: netWeightNumber,
-            stone_weight: stoneWeightNumber,
-            wastage_weight: wastageWeightNumber,
-            stone_type: formData.stoneType || null,
-            stone_count: stoneCountNumber,
-            stone_clarity: formData.stoneClarity || null,
-            stone_cut: formData.stoneCut || null,
-            stone_setting_type: formData.stoneSettingType || null,
-            ring_size: formData.ringSize || null,
-            chain_length: formData.chainLength || null,
-            bangle_size: formData.bangleSize || null,
-            design_type: formData.designType || null,
-            occasion: formData.occasion || null,
-            metal_finish: formData.metalFinish || null,
-            weight_type: formData.weightType || null,
-            gender: formData.gender || null,
-            return_allowed: formData.returnAllowed.toLowerCase() === 'yes',
-            return_period: formData.returnPeriod || null,
-            certificate_url: certificate_url,
-            making_type: formData.makingType || null,
-            packaging: formData.packaging || null,
-            product_video_url: product_video_url,
-            care_instructions: formData.careInstructions || null,
-            availability: formData.availability || null,
-          })
-          .eq('id', editingProduct.id)
-          .eq('merchant_id', user.id)
-          .select()
-          .single();
-        if (updError) throw updError;
+        // Attempt update with finance fields (if columns exist)
+        const updatePayload: any = {
+          name: formData.name,
+          description: formData.description,
+          price: priceNumber,
+          image_path,
+          image_url,
+          category: formData.category || null,
+          purity: formData.purity || null,
+          weight: weightNumber,
+          metal_type: formData.metalType || null,
+          gemstone: formData.gemstone || null,
+          discount_percent: discountNumber,
+          stock_qty: stockQtyNumber,
+          color: formData.color || null,
+          dimensions: formData.dimensions || null,
+          warranty: formData.warranty || null,
+          sku: formData.sku || null,
+          tags: formData.tags || null,
+          shipping_charge: shippingNumber,
+          making_time: formData.makingTime || null,
+          delivery_time: formData.deliveryTime || null,
+          hallmark_cert_number: formData.hallmarkCertNumber || null,
+          bis_hallmark_type: formData.bisHallmarkType || null,
+          net_weight: netWeightNumber,
+          stone_weight: stoneWeightNumber,
+          wastage_weight: wastageWeightNumber,
+          stone_type: formData.stoneType || null,
+          stone_count: stoneCountNumber,
+          stone_clarity: formData.stoneClarity || null,
+          stone_cut: formData.stoneCut || null,
+          stone_setting_type: formData.stoneSettingType || null,
+          ring_size: formData.ringSize || null,
+          chain_length: formData.chainLength || null,
+          bangle_size: formData.bangleSize || null,
+          design_type: formData.designType || null,
+          occasion: formData.occasion || null,
+          metal_finish: formData.metalFinish || null,
+          weight_type: formData.weightType || null,
+          gender: formData.gender || null,
+          return_allowed: formData.returnAllowed.toLowerCase() === 'yes',
+          return_period: formData.returnPeriod || null,
+          certificate_url: certificate_url,
+          making_type: formData.makingType || null,
+          packaging: formData.packaging || null,
+          product_video_url: product_video_url,
+          care_instructions: formData.careInstructions || null,
+          availability: formData.availability || null,
+        };
+        const chosenInterest = productFinance.interest_rate || (nbfcTerms?.interest_rate != null ? String(nbfcTerms.interest_rate) : '');
+        const chosenTenure = productFinance.tenure || (nbfcTerms?.default_tenure != null ? String(nbfcTerms.default_tenure) : '');
+        if (chosenInterest) (updatePayload as any).interest_rate = Number(chosenInterest);
+        if (chosenTenure) (updatePayload as any).tenure_months = Number(chosenTenure);
 
-        setProducts((prev) => prev.map((it) => (it.id === editingProduct.id ? (data as ProductRecord) : it)));
+        let updError: any = null; let updData: any = null;
+        try {
+          const r = await supabase
+            .from('products')
+            .update(updatePayload)
+            .eq('id', editingProduct.id)
+            .eq('merchant_id', user.id)
+            .select()
+            .single();
+          updError = r.error; updData = r.data;
+        } catch (e: any) {
+          updError = e;
+        }
+        if (updError) {
+          delete (updatePayload as any).interest_rate;
+          delete (updatePayload as any).tenure_months;
+          const r2 = await supabase
+            .from('products')
+            .update(updatePayload)
+            .eq('id', editingProduct.id)
+            .eq('merchant_id', user.id)
+            .select()
+            .single();
+          if (r2.error) throw r2.error;
+          updData = r2.data;
+        }
+
+        setProducts((prev) => prev.map((it) => (it.id === editingProduct.id ? (updData as ProductRecord) : it)));
         handleCloseModal();
       } else {
         let image_path: string | null = null;
@@ -589,14 +654,12 @@ export default function Product() {
         } else if (formData.imageUrl) {
           image_url = formData.imageUrl;
         }
-
         if (formData.certificateFile) {
           const uploaded = await uploadFileToBucket('product-certificates', formData.certificateFile, user.id);
           certificate_url = uploaded.url;
         } else if (formData.certificateUrl) {
           certificate_url = formData.certificateUrl;
         }
-
         if (formData.productVideoFile) {
           const uploaded = await uploadFileToBucket('product-videos', formData.productVideoFile, user.id);
           product_video_url = uploaded.url;
@@ -604,72 +667,89 @@ export default function Product() {
           product_video_url = formData.productVideoUrl;
         }
 
-        const { data, error: insertError } = await supabase
-          .from('products')
-          .insert({
-            merchant_id: user.id,
-            name: formData.name,
-            description: formData.description,
-            price: priceNumber,
-            image_path,
-            image_url,
-            category: formData.category || null,
-            purity: formData.purity || null,
-            weight: weightNumber,
-            metal_type: formData.metalType || null,
-            gemstone: formData.gemstone || null,
-            discount_percent: discountNumber,
-            stock_qty: stockQtyNumber,
-            color: formData.color || null,
-            dimensions: formData.dimensions || null,
-            warranty: formData.warranty || null,
-            sku: formData.sku || null,
-            tags: formData.tags || null,
-            shipping_charge: shippingNumber,
-            making_time: formData.makingTime || null,
-            delivery_time: formData.deliveryTime || null,
-            hallmark_cert_number: formData.hallmarkCertNumber || null,
-            bis_hallmark_type: formData.bisHallmarkType || null,
-            net_weight: netWeightNumber,
-            stone_weight: stoneWeightNumber,
-            wastage_weight: wastageWeightNumber,
-            stone_type: formData.stoneType || null,
-            stone_count: stoneCountNumber,
-            stone_clarity: formData.stoneClarity || null,
-            stone_cut: formData.stoneCut || null,
-            stone_setting_type: formData.stoneSettingType || null,
-            ring_size: formData.ringSize || null,
-            chain_length: formData.chainLength || null,
-            bangle_size: formData.bangleSize || null,
-            design_type: formData.designType || null,
-            occasion: formData.occasion || null,
-            metal_finish: formData.metalFinish || null,
-            weight_type: formData.weightType || null,
-            gender: formData.gender || null,
-            return_allowed: formData.returnAllowed.toLowerCase() === 'yes',
-            return_period: formData.returnPeriod || null,
-            certificate_url: certificate_url,
-            making_type: formData.makingType || null,
-            packaging: formData.packaging || null,
-            product_video_url: product_video_url,
-            care_instructions: formData.careInstructions || null,
-            availability: formData.availability || null,
-          })
-          .select()
-          .single();
-        if (insertError) throw insertError;
+        const insertPayload: any = {
+          merchant_id: user.id,
+          name: formData.name,
+          description: formData.description,
+          price: priceNumber,
+          image_path,
+          image_url,
+          category: formData.category || null,
+          purity: formData.purity || null,
+          weight: weightNumber,
+          metal_type: formData.metalType || null,
+          gemstone: formData.gemstone || null,
+          discount_percent: discountNumber,
+          stock_qty: stockQtyNumber,
+          color: formData.color || null,
+          dimensions: formData.dimensions || null,
+          warranty: formData.warranty || null,
+          sku: formData.sku || null,
+          tags: formData.tags || null,
+          shipping_charge: shippingNumber,
+          making_time: formData.makingTime || null,
+          delivery_time: formData.deliveryTime || null,
+          hallmark_cert_number: formData.hallmarkCertNumber || null,
+          bis_hallmark_type: formData.bisHallmarkType || null,
+          net_weight: netWeightNumber,
+          stone_weight: stoneWeightNumber,
+          wastage_weight: wastageWeightNumber,
+          stone_type: formData.stoneType || null,
+          stone_count: stoneCountNumber,
+          stone_clarity: formData.stoneClarity || null,
+          stone_cut: formData.stoneCut || null,
+          stone_setting_type: formData.stoneSettingType || null,
+          ring_size: formData.ringSize || null,
+          chain_length: formData.chainLength || null,
+          bangle_size: formData.bangleSize || null,
+          design_type: formData.designType || null,
+          occasion: formData.occasion || null,
+          metal_finish: formData.metalFinish || null,
+          weight_type: formData.weightType || null,
+          gender: formData.gender || null,
+          return_allowed: formData.returnAllowed.toLowerCase() === 'yes',
+          return_period: formData.returnPeriod || null,
+          certificate_url: certificate_url,
+          making_type: formData.makingType || null,
+          packaging: formData.packaging || null,
+          product_video_url: product_video_url,
+          care_instructions: formData.careInstructions || null,
+          availability: formData.availability || null,
+        };
+        const insInterest = productFinance.interest_rate || (nbfcTerms?.interest_rate != null ? String(nbfcTerms.interest_rate) : '');
+        const insTenure = productFinance.tenure || (nbfcTerms?.default_tenure != null ? String(nbfcTerms.default_tenure) : '');
+        if (insInterest) (insertPayload as any).interest_rate = Number(insInterest);
+        if (insTenure) (insertPayload as any).tenure_months = Number(insTenure);
 
-        setProducts((prev) => [data as ProductRecord, ...prev]);
+        let insErr: any = null; let insData: any = null;
+        try {
+          const r = await supabase
+            .from('products')
+            .insert(insertPayload)
+            .select()
+            .single();
+          insErr = r.error; insData = r.data;
+        } catch (e: any) {
+          insErr = e;
+        }
+        if (insErr) {
+          delete (insertPayload as any).interest_rate;
+          delete (insertPayload as any).tenure_months;
+          const r2 = await supabase
+            .from('products')
+            .insert(insertPayload)
+            .select()
+            .single();
+          if (r2.error) throw r2.error;
+          insData = r2.data;
+        }
+
+        setProducts((prev) => [insData as ProductRecord, ...prev]);
         handleCloseModal();
       }
     } catch (err: any) {
       const msg = err?.message ?? String(err);
-      const missing = msg.includes('schema cache') || msg.includes('does not exist');
-      setError(
-        missing
-          ? 'Products table not found. Please create public.products in Supabase and add RLS policies (see instructions).'
-          : msg
-      );
+      setError(msg);
     } finally {
       setSubmitting(false);
     }
@@ -1690,6 +1770,33 @@ export default function Product() {
 
               {currentStep === 4 && (
                 <div className="space-y-5">
+                  {/* NBFC Finance Terms */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Interest Rate (% p.a)</label>
+                      <input
+                        value={productFinance.interest_rate || (nbfcTerms?.interest_rate != null ? String(nbfcTerms.interest_rate) : '')}
+                        onChange={(e)=>setProductFinance((p)=>({ ...p, interest_rate: e.target.value }))}
+                        readOnly
+                        className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-slate-900 dark:text-gray-100 rounded-xl"
+                        placeholder="-"
+                        title={nbfcTerms?.interest_rate != null ? `From NBFC: ${nbfcTerms.interest_rate}%` : 'No tie-up terms found'}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Tenure (months)</label>
+                      <select
+                        value={productFinance.tenure || (nbfcTerms?.default_tenure != null ? String(nbfcTerms.default_tenure) : '')}
+                        onChange={(e)=>setProductFinance((p)=>({ ...p, tenure: e.target.value }))}
+                        className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl"
+                      >
+                        <option value="" disabled>{nbfcTerms?.default_tenure ? `Default: ${nbfcTerms.default_tenure} months` : 'Select tenure'}</option>
+                        {[3,6,9,12,18,24,36].map(m => (
+                          <option key={m} value={m}>{m} months</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label htmlFor="makingCharge" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Making Charge (₹)</label>

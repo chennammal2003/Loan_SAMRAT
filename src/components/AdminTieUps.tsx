@@ -24,6 +24,7 @@ export default function AdminTieUps() {
   const [tieDetails, setTieDetails] = useState<Record<string, { interest_rate: number|null; duration_months: number|null; terms_text: string|null; created_at: string }>>({});
   const [merchantMap, setMerchantMap] = useState<Record<string, { business_name?: string|null; owner_name?: string|null; email?: string|null; phone?: string|null }>>({});
   const [viewId, setViewId] = useState<string | null>(null);
+  const [nbfcDefaults, setNbfcDefaults] = useState<{ interest_rate?: number|null; default_tenure?: number|null; approval_type?: string|null } | null>(null);
   const isAdmin = profile?.role === 'admin';
 
   useEffect(() => {
@@ -31,6 +32,15 @@ export default function AdminTieUps() {
     (async () => {
       if (!isAdmin) { setLoading(false); return; }
       try {
+        // Load NBFC defaults for this admin
+        try {
+          const { data: nbfc } = await supabase
+            .from('nbfc_profiles')
+            .select('interest_rate,default_tenure,approval_type')
+            .eq('nbfc_id', profile!.id)
+            .maybeSingle();
+          if (!cancelled) setNbfcDefaults({ interest_rate: nbfc?.interest_rate ?? null, default_tenure: nbfc?.default_tenure ?? null, approval_type: nbfc?.approval_type ?? null });
+        } catch (_) {}
         const { data, error } = await supabase
           .from('nbfc_tieup_requests')
           .select('id,merchant_id,nbfc_id,admin_id,status,requested_at,responded_at,reason, merchant:user_profiles!nbfc_tieup_requests_merchant_id_fkey(username,email)')
@@ -111,8 +121,8 @@ export default function AdminTieUps() {
           nbfc_id: row.nbfc_id,
           admin_id: row.admin_id,
           created_at: new Date().toISOString(),
-          interest_rate: f.interest_rate ? Number(f.interest_rate) : null,
-          duration_months: f.duration_months ? Number(f.duration_months) : null,
+          interest_rate: f.interest_rate ? Number(f.interest_rate) : (nbfcDefaults?.interest_rate ?? null),
+          duration_months: f.duration_months ? Number(f.duration_months) : (nbfcDefaults?.default_tenure ?? null),
           terms_text: f.terms_text || null,
         };
         // Try with extended columns; on error, retry minimal
@@ -189,14 +199,14 @@ export default function AdminTieUps() {
                     step="0.01"
                     placeholder="Interest Rate (% p.a)"
                     className="px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm"
-                    value={form[r.id]?.interest_rate || ''}
+                    value={form[r.id]?.interest_rate || (nbfcDefaults?.interest_rate != null ? String(nbfcDefaults.interest_rate) : '')}
                     onChange={(e) => setForm(prev => ({ ...prev, [r.id]: { ...(prev[r.id]||{interest_rate:'',duration_months:'',terms_text:''}), interest_rate: e.target.value } }))}
                   />
                   <input
                     type="number"
                     placeholder="Duration (months)"
                     className="px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm"
-                    value={form[r.id]?.duration_months || ''}
+                    value={form[r.id]?.duration_months || (nbfcDefaults?.default_tenure != null ? String(nbfcDefaults.default_tenure) : '')}
                     onChange={(e) => setForm(prev => ({ ...prev, [r.id]: { ...(prev[r.id]||{interest_rate:'',duration_months:'',terms_text:''}), duration_months: e.target.value } }))}
                   />
                   <input
@@ -206,6 +216,13 @@ export default function AdminTieUps() {
                     value={form[r.id]?.terms_text || ''}
                     onChange={(e) => setForm(prev => ({ ...prev, [r.id]: { ...(prev[r.id]||{interest_rate:'',duration_months:'',terms_text:''}), terms_text: e.target.value } }))}
                   />
+                </div>
+              )}
+              {nbfcDefaults && r.status === 'pending' && (
+                <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">
+                  <span className="inline-block mr-2 px-2 py-1 rounded border border-blue-300 bg-blue-50 dark:bg-blue-900/20">Default Interest: {nbfcDefaults.interest_rate != null ? `${nbfcDefaults.interest_rate}% p.a` : '-'}</span>
+                  <span className="inline-block mr-2 px-2 py-1 rounded border border-blue-300 bg-blue-50 dark:bg-blue-900/20">Default Duration: {nbfcDefaults.default_tenure != null ? `${nbfcDefaults.default_tenure} months` : '-'}</span>
+                  <span className="inline-block px-2 py-1 rounded border border-blue-300 bg-blue-50 dark:bg-blue-900/20">Approval Type: {nbfcDefaults.approval_type || '-'}</span>
                 </div>
               )}
             </div>

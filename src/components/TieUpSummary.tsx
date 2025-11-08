@@ -29,7 +29,7 @@ export default function TieUpSummary() {
       try {
         const { data, error } = await supabase
           .from('nbfc_tieups')
-          .select('id,merchant_id,nbfc_id,admin_id,interest_rate,duration_months,terms_text,created_at, nbfc:nbfc_profiles!nbfc_tieups_nbfc_id_fkey(name), admin:user_profiles!nbfc_tieups_admin_id_fkey(username,email)')
+          .select('id,merchant_id,nbfc_id,admin_id,interest_rate,duration_months,terms_text,created_at, nbfc:nbfc_profiles!nbfc_tieups_nbfc_id_fkey(name,interest_rate,processing_fee,approval_type), admin:user_profiles!nbfc_tieups_admin_id_fkey(username,email)')
           .eq('merchant_id', profile.id)
           .maybeSingle();
         if (error) throw error;
@@ -57,16 +57,16 @@ export default function TieUpSummary() {
       </div>
       <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
         <div className="rounded bg-white dark:bg-gray-800 p-3 border border-gray-200 dark:border-gray-700">
+          <div className="text-gray-500 dark:text-gray-400">Admin Name</div>
+          <div className="font-medium text-gray-900 dark:text-white">{row.admin?.username || row.admin_id}</div>
+        </div>
+        <div className="rounded bg-white dark:bg-gray-800 p-3 border border-gray-200 dark:border-gray-700">
+          <div className="text-gray-500 dark:text-gray-400">Admin Email</div>
+          <div className="font-medium text-gray-900 dark:text-white truncate">{row.admin?.email || '-'}</div>
+        </div>
+        <div className="rounded bg-white dark:bg-gray-800 p-3 border border-gray-200 dark:border-gray-700">
           <div className="text-gray-500 dark:text-gray-400">Interest Rate</div>
-          <div className="font-medium text-gray-900 dark:text-white">{row.interest_rate != null ? `${row.interest_rate}% p.a` : '-'}</div>
-        </div>
-        <div className="rounded bg-white dark:bg-gray-800 p-3 border border-gray-200 dark:border-gray-700">
-          <div className="text-gray-500 dark:text-gray-400">Duration</div>
-          <div className="font-medium text-gray-900 dark:text-white">{row.duration_months != null ? `${row.duration_months} months` : '-'}</div>
-        </div>
-        <div className="rounded bg-white dark:bg-gray-800 p-3 border border-gray-200 dark:border-gray-700">
-          <div className="text-gray-500 dark:text-gray-400">Loan Terms</div>
-          <div className="font-medium text-gray-900 dark:text-white truncate">{row.terms_text || '-'}</div>
+          <div className="font-medium text-gray-900 dark:text-white truncate">{row.nbfc && (row.nbfc as any).interest_rate != null ? `${(row.nbfc as any).interest_rate}% p.a` : '-'}</div>
         </div>
       </div>
 
@@ -84,8 +84,8 @@ export default function TieUpSummary() {
                 <table className="w-full">
                   <tbody>
                     <tr><td className="py-1 pr-3 text-gray-500">Name</td><td className="py-1 font-medium text-gray-900 dark:text-white">{row.nbfc?.name || row.nbfc_id}</td></tr>
-                    <tr><td className="py-1 pr-3 text-gray-500">Processing Fee</td><td className="py-1 font-medium text-gray-900 dark:text-white">{/* optional; shown if available via a separate query in parent */}-</td></tr>
-                    <tr><td className="py-1 pr-3 text-gray-500">Approval Type</td><td className="py-1 font-medium text-gray-900 dark:text-white">-</td></tr>
+                    <tr><td className="py-1 pr-3 text-gray-500">Processing Fee</td><td className="py-1 font-medium text-gray-900 dark:text-white">{row.nbfc && (row.nbfc as any).processing_fee != null ? `${(row.nbfc as any).processing_fee}` : '-'}</td></tr>
+                    <tr><td className="py-1 pr-3 text-gray-500">Approval Type</td><td className="py-1 font-medium text-gray-900 dark:text-white">{row.nbfc && (row.nbfc as any).approval_type ? (row.nbfc as any).approval_type : '-'}</td></tr>
                   </tbody>
                 </table>
               </div>

@@ -2,17 +2,6 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
-interface AdminNotification {
-  id: string;
-  admin_id: string;
-  type: 'system'|'merchant_request'|'loan_approval'|'loan_rejection'|'user_report'|'general';
-  title: string | null;
-  message: string | null;
-  payload: { merchant_id?: string; merchant_name?: string; nbfc_id?: string; nbfc_name?: string };
-  created_at: string;
-  is_read?: boolean | null;
-}
-
 interface PendingRequestCard {
   id: string;
   created_at: string;
@@ -25,9 +14,10 @@ export default function AdminNotificationsPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null);
-  const [form, setForm] = useState<Record<string, { interest_rate: string; duration_months: string; terms_text: string }>>({});
+  // No terms inputs required; only merchant details with Approve/Reject
   const [merchantMap, setMerchantMap] = useState<Record<string, { business_name?: string|null; owner_name?: string|null; email?: string|null; phone?: string|null }>>({});
   const [viewId, setViewId] = useState<string | null>(null);
+  // No NBFC defaults shown in this panel
 
   useEffect(() => {
     let cancelled = false;
@@ -103,23 +93,9 @@ export default function AdminNotificationsPanel() {
       if (updErr) throw updErr;
       // Insert tie-up if approved
       if (approve) {
-        const f = form[n.id] || { interest_rate: '', duration_months: '', terms_text: '' };
-        const payload: any = {
-          merchant_id: n.payload.merchant_id,
-          nbfc_id: n.payload.nbfc_id,
-          admin_id: profile.id,
-          created_at: new Date().toISOString(),
-          interest_rate: f.interest_rate ? Number(f.interest_rate) : null,
-          duration_months: f.duration_months ? Number(f.duration_months) : null,
-          terms_text: f.terms_text || null,
-        };
-        let insErr = (await supabase.from('nbfc_tieups').insert(payload)).error;
-        if (insErr) {
-          insErr = (await supabase
-            .from('nbfc_tieups')
-            .insert({ merchant_id: n.payload.merchant_id, nbfc_id: n.payload.nbfc_id, admin_id: profile.id, created_at: new Date().toISOString() })
-          ).error;
-        }
+        const { error: insErr } = await supabase
+          .from('nbfc_tieups')
+          .insert({ merchant_id: n.payload.merchant_id, nbfc_id: n.payload.nbfc_id, admin_id: profile.id, created_at: new Date().toISOString() });
         if (insErr) throw insErr;
       }
       // Mark notification as read (best-effort)
@@ -167,31 +143,7 @@ export default function AdminNotificationsPanel() {
             </div>
           </div>
 
-          {/* Inline approval terms */}
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Interest Rate (% p.a)"
-              className="px-3 py-2 rounded border border-gray-300 bg-white text-sm"
-              value={form[n.id]?.interest_rate || ''}
-              onChange={(e)=>setForm(prev=>({ ...prev, [n.id]: { ...(prev[n.id]||{ interest_rate:'', duration_months:'', terms_text:'' }), interest_rate: e.target.value } }))}
-            />
-            <input
-              type="number"
-              placeholder="Duration (months)"
-              className="px-3 py-2 rounded border border-gray-300 bg-white text-sm"
-              value={form[n.id]?.duration_months || ''}
-              onChange={(e)=>setForm(prev=>({ ...prev, [n.id]: { ...(prev[n.id]||{ interest_rate:'', duration_months:'', terms_text:'' }), duration_months: e.target.value } }))}
-            />
-            <input
-              type="text"
-              placeholder="Loan terms (optional)"
-              className="px-3 py-2 rounded border border-gray-300 bg-white text-sm"
-              value={form[n.id]?.terms_text || ''}
-              onChange={(e)=>setForm(prev=>({ ...prev, [n.id]: { ...(prev[n.id]||{ interest_rate:'', duration_months:'', terms_text:'' }), terms_text: e.target.value } }))}
-            />
-          </div>
+          {/* No rate/duration/terms inputs per requirement */}
 
           <div className="mt-3 flex gap-2">
             <button onClick={() => setViewId(n.payload.merchant_id)} className="px-3 py-1.5 rounded bg-white text-blue-900 border border-blue-300 hover:bg-blue-100">View Merchant Details</button>

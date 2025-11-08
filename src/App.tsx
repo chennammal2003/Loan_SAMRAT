@@ -40,6 +40,7 @@ import NbfcSetup from './pages/NbfcSetup';
 import TieUpGate from './components/TieUpGate';
 import NbfcSelect from './pages/NbfcSelect';
 import AdminTieUps from './components/AdminTieUps';
+import RequireMerchantProfile from './components/RequireMerchantProfile';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -145,7 +146,7 @@ function App() {
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/apply-loan/:linkId" element={<PublicApplyLoanPage />} />
             <Route path="/nbfc/setup" element={<PrivateRoute><NbfcSetup /></PrivateRoute>} />
-            <Route path="/nbfc/select" element={<MerchantRoute><NbfcSelect /></MerchantRoute>} />
+            <Route path="/nbfc/select" element={<MerchantRoute><RequireMerchantProfile><NbfcSelect /></RequireMerchantProfile></MerchantRoute>} />
             <Route path="/admin/manage" element={<AdminRoute><PageShell><ManageLoans initialStatusFilter={'All'} /></PageShell></AdminRoute>} />
             <Route path="/admin/accepted" element={<AdminRoute><PageShell><AcceptedLoans /></PageShell></AdminRoute>} />
             <Route path="/admin/disbursed" element={<AdminRoute><PageShell><DisbursedLoans /></PageShell></AdminRoute>} />
