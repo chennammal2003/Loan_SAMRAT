@@ -53,13 +53,22 @@ export default function AdminTieUps() {
         const approvedMerchantIds = reqs.filter(r => r.status === 'approved').map(r => r.merchant_id);
         if (approvedMerchantIds.length) {
           try {
-            const { data: ties } = await supabase
+            // Try extended fields first
+            let tiesRes: any = await supabase
               .from('nbfc_tieups')
               .select('merchant_id,interest_rate,duration_months,terms_text,created_at')
               .eq('admin_id', profile!.id)
               .in('merchant_id', approvedMerchantIds);
+            if (tiesRes.error) {
+              // Retry minimal fields if optional columns don't exist
+              tiesRes = await supabase
+                .from('nbfc_tieups')
+                .select('merchant_id,created_at')
+                .eq('admin_id', profile!.id)
+                .in('merchant_id', approvedMerchantIds);
+            }
             const map: Record<string, any> = {};
-            (ties || []).forEach((t: any) => { map[t.merchant_id] = { interest_rate: t.interest_rate ?? null, duration_months: t.duration_months ?? null, terms_text: t.terms_text ?? null, created_at: t.created_at }; });
+            (tiesRes.data || []).forEach((t: any) => { map[t.merchant_id] = { interest_rate: t.interest_rate ?? null, duration_months: t.duration_months ?? null, terms_text: t.terms_text ?? null, created_at: t.created_at }; });
             if (!cancelled) setTieDetails(map);
           } catch (_) {}
         }

@@ -13,6 +13,7 @@ import ProductsAdmin from './admin/ProductsAdmin';
 import AdminProductLoans from './AdminProductLoans';
 import Settings from './Settings';
 import AdminNotificationsPanel from './AdminNotificationsPanel';
+import AdminActiveTieUps from './AdminActiveTieUps';
 
 type ActiveTab = 'home' | 'manage' | 'accepted' | 'disbursed' | 'payments' | 'merchants' | 'products' | 'productLoans' | 'settings';
 
@@ -210,6 +211,7 @@ export default function AdminDashboard() {
           {activeTab === 'home' && (
             <div className="space-y-6">
               <AdminNotificationsPanel />
+              <AdminActiveTieUps />
               <DashboardStats
                 onSelectStatus={(status) => {
                   setManageInitialFilter(status);
