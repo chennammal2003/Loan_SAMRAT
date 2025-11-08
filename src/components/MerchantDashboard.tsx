@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { FileText, LogOut, Moon, Sun, Plus, List, Package, User, HandCoins, Share2, TrendingUp } from 'lucide-react';
+import { FileText, LogOut, Moon, Sun, Plus, List, Package, User, HandCoins, Share2, TrendingUp, Settings as SettingsIcon } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import ApplyLoanModal from './ApplyLoanModal';
 import LoanDetails from './LoanDetails';
@@ -11,12 +11,14 @@ import MerchantProfilePanel from './MerchantProfilePanel';
 import DashboardStats from './DashboardStats';
 import MerchantProfileGate from './MerchantProfileGate';
 import MerchantPaymentTracker from './MerchantPaymentTracker';
+import TieUpSummary from './TieUpSummary';
 import LiveMetalRates from './LiveMetalRates';
 import ShareLinkPanel from './ShareLinkPanel';
 import MerchantOrders from './merchant/MerchantOrders';
 import MerchantProductLoans from './MerchantProductLoans';
+import Settings from './Settings';
 
-type ActiveTab = 'home' | 'apply' | 'loans' | 'disbursed' | 'paymentTracker' | 'products' | 'share' | 'orders' | 'productLoans';
+type ActiveTab = 'home' | 'apply' | 'loans' | 'disbursed' | 'paymentTracker' | 'products' | 'share' | 'orders' | 'productLoans' | 'settings';
 
 export default function MerchantDashboard() {
   const { profile, signOut } = useAuth();
@@ -169,6 +171,18 @@ export default function MerchantDashboard() {
             <User className="w-5 h-5" />
             <span>My Profile</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+              activeTab === 'settings'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            <SettingsIcon className="w-5 h-5" />
+            <span>Settings</span>
+          </button>
         </nav>
 
         <div className="mt-auto w-64 p-4 border-t border-gray-200 dark:border-gray-700">
@@ -200,6 +214,7 @@ export default function MerchantDashboard() {
               {activeTab === 'productLoans' && 'Product Loans'}
               {activeTab === 'share' && 'Share Apply Link'}
               {activeTab === 'orders' && 'Orders'}
+              {activeTab === 'settings' && 'Settings'}
             </h1>
             <div className="flex items-center gap-4">
               <LiveMetalRates />
@@ -215,12 +230,15 @@ export default function MerchantDashboard() {
 
         <div className="p-8">
           {activeTab === 'home' && (
-            <DashboardStats
-              onSelectStatus={(status) => {
-                setLoanInitialFilter(status);
-                setActiveTab('loans');
-              }}
-            />
+            <>
+              <TieUpSummary />
+              <DashboardStats
+                onSelectStatus={(status) => {
+                  setLoanInitialFilter(status);
+                  setActiveTab('loans');
+                }}
+              />
+            </>
           )}
           {activeTab === 'loans' && <LoanDetails initialStatusFilter={loanInitialFilter} />}
           {activeTab === 'disbursed' && <MerchantDisbursedLoans />}
@@ -249,6 +267,11 @@ export default function MerchantDashboard() {
               <MerchantOrders />
             </div>
           )}
+          {activeTab === 'settings' && (
+            <div className="space-y-6">
+              <Settings role="merchant" />
+            </div>
+          )}
         </div>
       </main>
 
@@ -268,7 +291,7 @@ export default function MerchantDashboard() {
 
       {/* First-time merchant profile setup gate (auto-skips if already completed) */}
       {showProfileSetup && (
-        <MerchantProfileGate onDone={() => setShowProfileSetup(false)} />
+        <MerchantProfileGate onDone={() => { setShowProfileSetup(false); }} />
       )}
     </div>
   );

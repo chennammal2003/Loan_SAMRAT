@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Shield, LogOut, Moon, Sun, List, CheckCircle, Users, HandCoins, TrendingUp, Package, FileText } from 'lucide-react';
+import { Shield, LogOut, Moon, Sun, List, CheckCircle, Users, HandCoins, TrendingUp, Package, FileText, Settings as SettingsIcon } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import ManageLoans from './ManageLoans';
 import AcceptedLoans from './AcceptedLoans';
@@ -11,8 +11,10 @@ import DashboardStats from './DashboardStats';
 import PaymentTracker from './paymentTracker';
 import ProductsAdmin from './admin/ProductsAdmin';
 import AdminProductLoans from './AdminProductLoans';
+import Settings from './Settings';
+import AdminNotificationsPanel from './AdminNotificationsPanel';
 
-type ActiveTab = 'home' | 'manage' | 'accepted' | 'disbursed' | 'payments' | 'merchants' | 'products' | 'productLoans';
+type ActiveTab = 'home' | 'manage' | 'accepted' | 'disbursed' | 'payments' | 'merchants' | 'products' | 'productLoans' | 'settings';
 
 export default function AdminDashboard() {
   const { profile, signOut } = useAuth();
@@ -144,6 +146,18 @@ export default function AdminDashboard() {
             <Users className="w-5 h-5" />
             <span>Merchant Details</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+              activeTab === 'settings'
+                ? 'bg-orange-600 text-white'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            <SettingsIcon className="w-5 h-5" />
+            <span>Settings</span>
+          </button>
         </nav>
 
         <div className="p-4 border-t border-gray-200 dark:border-gray-700">
@@ -181,6 +195,7 @@ export default function AdminDashboard() {
               {activeTab === 'disbursed' && 'Disbursed Loans'}
               {activeTab === 'payments' && 'Payment Tracker'}
               {activeTab === 'merchants' && 'Merchants'}
+              {activeTab === 'settings' && 'Settings'}
             </h1>
             <button
               onClick={toggleTheme}
@@ -193,12 +208,15 @@ export default function AdminDashboard() {
 
         <div className="p-8">
           {activeTab === 'home' && (
-            <DashboardStats
-              onSelectStatus={(status) => {
-                setManageInitialFilter(status);
-                setActiveTab('manage');
-              }}
-            />
+            <div className="space-y-6">
+              <AdminNotificationsPanel />
+              <DashboardStats
+                onSelectStatus={(status) => {
+                  setManageInitialFilter(status);
+                  setActiveTab('manage');
+                }}
+              />
+            </div>
           )}
           {activeTab === 'products' && <ProductsAdmin />}
           {activeTab === 'productLoans' && <AdminProductLoans />}
@@ -207,6 +225,7 @@ export default function AdminDashboard() {
           {activeTab === 'disbursed' && <DisbursedLoans />}
           {activeTab === 'payments' && <PaymentTracker />}
           {activeTab === 'merchants' && <MerchantDetails />}
+          {activeTab === 'settings' && <Settings role="admin" />}
         </div>
       </main>
 

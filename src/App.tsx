@@ -21,6 +21,7 @@ import PageShell from './components/PageShell';
 import Product from './components/products';
 import AdminProductLoans from './components/AdminProductLoans';
 import MerchantProductLoans from './components/MerchantProductLoans';
+import Settings from './components/Settings';
 import StorePage from './components/StorePage';
 import CustomerHome from './components/customer/CustomerHome';
 import CustomerOrders from './components/customer/CustomerOrders';
@@ -34,6 +35,11 @@ import ProductDetailPage from './components/customer/ProductDetailPage';
 import PaymentChoicePage from './components/customer/PaymentChoicePage';
 import FinanceTenurePage from './components/customer/FinanceTenurePage';
 import LoanApplyPage from './components/customer/LoanApplyPage';
+import NbfcProfileGate from './components/NbfcProfileGate';
+import NbfcSetup from './pages/NbfcSetup';
+import TieUpGate from './components/TieUpGate';
+import NbfcSelect from './pages/NbfcSelect';
+import AdminTieUps from './components/AdminTieUps';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -89,7 +95,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   }
   if (!user) return <Navigate to="/signin" replace />;
   if (!profile) return null;
-  if (profile.role !== 'admin') return <Navigate to="/dashboard" replace />;
+  if (!['admin','nbfc_admin'].includes(profile.role as any)) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
@@ -119,8 +125,8 @@ function DashboardRouter() {
     );
   }
 
-  if (profile.role === 'admin') return <AdminDashboard />;
-  if (profile.role === 'merchant') return <MerchantDashboard />;
+  if (['admin','nbfc_admin'].includes(profile.role as any)) return <NbfcProfileGate><AdminDashboard /></NbfcProfileGate>;
+  if (profile.role === 'merchant') return <TieUpGate><MerchantDashboard /></TieUpGate>;
   // Customer: send to customer area (index renders store)
   return <Navigate to="/customer" replace />;
 }
@@ -138,18 +144,23 @@ function App() {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/apply-loan/:linkId" element={<PublicApplyLoanPage />} />
+            <Route path="/nbfc/setup" element={<PrivateRoute><NbfcSetup /></PrivateRoute>} />
+            <Route path="/nbfc/select" element={<MerchantRoute><NbfcSelect /></MerchantRoute>} />
             <Route path="/admin/manage" element={<AdminRoute><PageShell><ManageLoans initialStatusFilter={'All'} /></PageShell></AdminRoute>} />
             <Route path="/admin/accepted" element={<AdminRoute><PageShell><AcceptedLoans /></PageShell></AdminRoute>} />
             <Route path="/admin/disbursed" element={<AdminRoute><PageShell><DisbursedLoans /></PageShell></AdminRoute>} />
             <Route path="/admin/payments" element={<AdminRoute><PageShell><MerchantPaymentTracker /></PageShell></AdminRoute>} />
             <Route path="/admin/merchants" element={<AdminRoute><PageShell><MerchantDetails /></PageShell></AdminRoute>} />
             <Route path="/admin/product-loans" element={<AdminRoute><PageShell><AdminProductLoans /></PageShell></AdminRoute>} />
+            <Route path="/admin/settings" element={<AdminRoute><PageShell><Settings role="admin" /></PageShell></AdminRoute>} />
+            <Route path="/admin/tieups" element={<AdminRoute><PageShell><AdminTieUps /></PageShell></AdminRoute>} />
             {/* Merchant standalone pages (no dashboard shell) */}
             <Route path="/loans" element={<MerchantRoute><PageShell><LoanDetails /></PageShell></MerchantRoute>} />
             <Route path="/disbursed" element={<MerchantRoute><PageShell><MerchantDisbursedLoans /></PageShell></MerchantRoute>} />
             <Route path="/payments" element={<MerchantRoute><PageShell><MerchantPaymentTracker /></PageShell></MerchantRoute>} />
             <Route path="/products" element={<MerchantRoute><PageShell><Product /></PageShell></MerchantRoute>} />
             <Route path="/merchant/product-loans" element={<MerchantRoute><PageShell><MerchantProductLoans /></PageShell></MerchantRoute>} />
+            <Route path="/merchant/settings" element={<MerchantRoute><PageShell><Settings role="merchant" /></PageShell></MerchantRoute>} />
             {/* Customer area with shared shell/header */}
             <Route path="/customer" element={<CustomerRoute><CustomerShell /></CustomerRoute>}>
               <Route index element={<StorePage />} />
