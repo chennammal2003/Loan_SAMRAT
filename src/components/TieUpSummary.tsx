@@ -21,6 +21,13 @@ export default function TieUpSummary() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [referralCode, setReferralCode] = useState<string>('');
+  const [referralMsg, setReferralMsg] = useState<string>('');
+  const genCode = (name: string | undefined | null, id: string) => {
+    const base = (name || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) || 'REF';
+    const suffix = (id || '').slice(0, 4).toUpperCase();
+    return `${base}-${suffix}`;
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -34,6 +41,42 @@ export default function TieUpSummary() {
           .maybeSingle();
         if (error) throw error;
         if (!cancelled) setRow(data as any);
+        // Load referral code and message from merchant profile
+        try {
+          const { data: m } = await supabase
+            .from('merchant_profiles')
+            .select('referral_code,referral_message')
+            .eq('merchant_id', profile.id)
+            .maybeSingle();
+          if (!cancelled) {
+            setReferralCode((m as any)?.referral_code || '');
+            setReferralMsg((m as any)?.referral_message || '');
+          }
+        } catch (_) {}
+
+        // Fallback: read from latest approval notification if profile fields are empty
+        if (!cancelled && (!referralCode || !referralMsg)) {
+          try {
+            const { data: notes } = await supabase
+              .from('notifications')
+              .select('payload, created_at')
+              .eq('user_id', profile.id)
+              .eq('type', 'tieup_approved')
+              .order('created_at', { ascending: false })
+              .limit(1);
+            const p = (notes && notes[0]?.payload) || null;
+            if (p) {
+              if (!referralCode && (p as any).referral_code) setReferralCode((p as any).referral_code);
+              if (!referralMsg && (p as any).referral_message) setReferralMsg((p as any).referral_message);
+            }
+          } catch (_) {}
+        }
+
+        // Display-only suggestion if still empty
+        if (!cancelled && !referralCode) {
+          const suggestion = genCode(profile.username, profile.id);
+          setReferralCode(suggestion);
+        }
       } catch (e: any) {
         if (!cancelled) setError(e?.message || 'Failed to load tie-up');
       } finally {
@@ -53,7 +96,14 @@ export default function TieUpSummary() {
           <h3 className="text-lg font-semibold text-green-800 dark:text-green-200">You are tied up with NBFC {row.nbfc?.name || row.nbfc_id}</h3>
           <p className="text-sm text-green-900/80 dark:text-green-300/80">Approved on {new Date(row.created_at).toLocaleDateString()}</p>
         </div>
-        <button onClick={() => setShowAdmin(true)} className="px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700">View Admin Details</button>
+        <div className="flex items-center gap-3">
+          {referralCode && (
+            <div className="px-3 py-1 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-200 text-sm font-semibold border border-indigo-200 dark:border-indigo-700">
+              Your Referral Code: {referralCode}
+            </div>
+          )}
+          <button onClick={() => setShowAdmin(true)} className="px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700">View Admin Details</button>
+        </div>
       </div>
       <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
         <div className="rounded bg-white dark:bg-gray-800 p-3 border border-gray-200 dark:border-gray-700">
@@ -69,6 +119,12 @@ export default function TieUpSummary() {
           <div className="font-medium text-gray-900 dark:text-white truncate">{row.nbfc && (row.nbfc as any).interest_rate != null ? `${(row.nbfc as any).interest_rate}% p.a` : '-'}</div>
         </div>
       </div>
+
+      {referralMsg && (
+        <div className="mt-3 text-xs text-gray-700 dark:text-gray-300">
+          {referralMsg}
+        </div>
+      )}
 
       {showAdmin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

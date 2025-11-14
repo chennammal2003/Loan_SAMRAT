@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
+import NbfcSetup from '../pages/NbfcSetup';
 import { 
   User, 
   Shield, 
@@ -16,7 +17,7 @@ import {
   XCircle
 } from 'lucide-react';
 
-type SettingsSection = 'profile' | 'security' | 'notifications' | 'appearance' | 'system' | 'billing';
+type SettingsSection = 'profile' | 'security' | 'notifications' | 'appearance' | 'system' | 'billing' | 'nbfc';
 
 interface SettingsProps {
   role: 'merchant' | 'admin';
@@ -255,6 +256,7 @@ export default function Settings({ role }: SettingsProps) {
     { id: 'security' as SettingsSection, label: 'Security', icon: Shield },
     { id: 'notifications' as SettingsSection, label: 'Notifications', icon: Bell },
     { id: 'appearance' as SettingsSection, label: 'Appearance', icon: Palette },
+    ...(role === 'admin' ? ([{ id: 'nbfc' as SettingsSection, label: 'NBFC Profile', icon: Database }] as const) : ([] as const)),
     { id: 'system' as SettingsSection, label: role === 'admin' ? 'System' : 'Account', icon: Database },
     { id: 'billing' as SettingsSection, label: 'Billing', icon: CreditCard },
   ];
@@ -356,6 +358,18 @@ export default function Settings({ role }: SettingsProps) {
                       <Save className="w-4 h-4" />
                       <span>{updatingProfile ? 'Saving...' : 'Save Changes'}</span>
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* NBFC Profile Section (Admin only) */}
+              {activeSection === 'nbfc' && (
+                <div className="space-y-6">
+                  <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">NBFC Profile</h2>
+                  <p className="text-gray-600 dark:text-gray-400">View and update your institution details, financial parameters, loan configuration, approval settings and compliance documents.</p>
+                  <div className="-m-6">
+                    {/* Embedded NBFC Setup/Edit form */}
+                    <NbfcSetup embedded />
                   </div>
                 </div>
               )}

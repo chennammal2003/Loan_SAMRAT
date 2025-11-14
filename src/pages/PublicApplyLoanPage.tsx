@@ -19,6 +19,7 @@ const initialFormData: LoanFormData = {
   tenure: '',
   processingFee: 0,
   gstAccepted: false,
+  selectedProducts: [],
   firstName: '',
   lastName: '',
   fatherMotherSpouseName: '',
@@ -98,7 +99,7 @@ export default function PublicApplyLoanPage() {
   // Validation for public flow: do NOT require files
   const computeErrors = (): Record<string, string> => {
     const e: Record<string, string> = {};
-    if (!formData.interestScheme) e.interestScheme = 'Required';
+    if (!formData.selectedProducts || formData.selectedProducts.length === 0) e.selectedProducts = 'Please choose at least one product';
     if (!formData.goldPriceLockDate) e.goldPriceLockDate = 'Required';
     if (!formData.loanAmount) e.loanAmount = 'Required';
     if (!formData.tenure) e.tenure = 'Required';
@@ -135,7 +136,7 @@ export default function PublicApplyLoanPage() {
   const computeStepErrors = (step: number): Record<string, string> => {
     const e: Record<string, string> = {};
     if (step === 1) {
-      if (!formData.interestScheme) e.interestScheme = 'Required';
+      if (!formData.selectedProducts || formData.selectedProducts.length === 0) e.selectedProducts = 'Please choose at least one product';
       if (!formData.goldPriceLockDate) e.goldPriceLockDate = 'Required';
       if (!formData.loanAmount) e.loanAmount = 'Required';
       if (!formData.tenure) e.tenure = 'Required';
@@ -198,6 +199,13 @@ export default function PublicApplyLoanPage() {
     if (Object.keys(e).length > 0) return;
     setSubmitting(true);
     try {
+      const interestSchemeIds = (formData.selectedProducts || []).map(p => p.id).join(',');
+      const selectedProductsPayload = (formData.selectedProducts || []).map(p => ({ id: p.id, name: p.name, price: p.price }));
+      const tenureToInsert = (() => {
+        const t = parseInt(String(formData.tenure), 10);
+        if (Number.isFinite(t) && t > 0) return t;
+        return 12;
+      })();
       const { error } = await supabase.rpc('submit_loan_via_share_link', {
         p_link_id: linkId,
         p_payload: {
@@ -226,11 +234,12 @@ export default function PublicApplyLoanPage() {
           reference2_address: formData.reference2Address,
           reference2_contact: formData.reference2Contact,
           reference2_relationship: formData.reference2Relationship,
-          interest_scheme: formData.interestScheme,
+          interest_scheme: interestSchemeIds,
+          selected_products: selectedProductsPayload,
           gold_price_lock_date: formData.goldPriceLockDate,
           down_payment_details: formData.downPaymentDetails,
           loan_amount: parseFloat(formData.loanAmount),
-          tenure: parseInt(formData.tenure),
+          tenure: tenureToInsert,
           processing_fee: formData.processingFee,
           declaration_accepted: formData.declarationAccepted,
         },
@@ -254,9 +263,10 @@ export default function PublicApplyLoanPage() {
             loan: {
               amount: parseFloat(formData.loanAmount),
               tenure: parseInt(formData.tenure),
-              interestScheme: formData.interestScheme,
+              interestScheme: interestSchemeIds,
               processingFee: formData.processingFee,
               goldPriceLockDate: formData.goldPriceLockDate,
+              selectedProducts: selectedProductsPayload,
             },
             references: [
               { name: formData.reference1Name, contact: formData.reference1Contact, relationship: formData.reference1Relationship },

@@ -18,6 +18,14 @@ export interface UserProfile {
   role: UserRole;
   created_at: string;
   updated_at: string;
+  mobile?: string | null;
+  full_name?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  avatar_url?: string | null;
+  date_of_birth?: string | null;
+  is_active?: boolean | null;
+  is_first_login?: boolean | null;
 }
 
 export interface LoanApplication {
@@ -56,6 +64,7 @@ export interface LoanApplication {
   tenure: 3 | 6 | 9 | 12;
   processing_fee: number;
   status: 'Pending' | 'Accepted' | 'Verified' | 'Loan Disbursed' | 'Rejected';
+  documents: 'N/A' | 'Uploaded' | 'view documents';
   declaration_accepted: boolean;
   created_at: string;
   updated_at: string;

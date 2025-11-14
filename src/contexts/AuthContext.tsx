@@ -69,6 +69,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const usernameFromMeta = (authUser.user_metadata as any)?.username as string | undefined;
           const roleFromMeta = (authUser.user_metadata as any)?.role as 'merchant' | 'admin' | 'customer' | undefined;
           const emailFromAuth = authUser.email ?? '';
+          const mobileFromMetaRaw = (authUser.user_metadata as any)?.mobile as string | undefined;
+          const mobileSanitized = (mobileFromMetaRaw || '').replace(/\D/g, '').slice(-10) || null;
           const derivedUsername = usernameFromMeta || (emailFromAuth ? emailFromAuth.split('@')[0] : 'user');
 
           const { error: upsertErr } = await supabase
@@ -79,6 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 username: derivedUsername,
                 email: emailFromAuth,
                 role: (roleFromMeta ?? 'customer'),
+                mobile: mobileSanitized,
               },
               { onConflict: 'id' }
             );
@@ -137,6 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Insert profile only if a session exists (e.g., email auto-confirm enabled)
     if (authData.session) {
+      const mobileSanitized = (mobile || '').replace(/\D/g, '').slice(-10) || null;
       const { error: profileError } = await supabase
         .from('user_profiles')
         .insert({
@@ -144,6 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           username,
           email,
           role,
+          mobile: mobileSanitized,
         });
 
       if (profileError) {

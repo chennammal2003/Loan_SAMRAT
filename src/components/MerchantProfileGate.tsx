@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
+import { useNavigate } from 'react-router-dom';
 
 interface Props {
   onDone: () => void;
@@ -60,7 +61,8 @@ const genCode = (biz: string, location: string, seed: string) => {
 };
 
 export default function MerchantProfileGate({ onDone }: Props) {
-  const { profile } = useAuth();
+  const { profile, signOut } = useAuth();
+  const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -210,13 +212,21 @@ export default function MerchantProfileGate({ onDone }: Props) {
             </div>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Complete your profile to continue</p>
           </div>
-          <button
-            onClick={toggleTheme}
-            className="px-3 py-1.5 rounded-full bg-gray-900/5 dark:bg-white/10 hover:bg-gray-900/10 dark:hover:bg-white/15 text-xs text-gray-700 dark:text-gray-200 border border-gray-900/10 dark:border-white/10 transition-colors"
-            title={theme === 'light' ? 'Switch to dark' : 'Switch to light'}
-          >
-            {theme === 'light' ? 'Dark' : 'Light'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleTheme}
+              className="px-3 py-1.5 rounded-full bg-gray-900/5 dark:bg-white/10 hover:bg-gray-900/10 dark:hover:bg-white/15 text-xs text-gray-700 dark:text-gray-200 border border-gray-900/10 dark:border-white/10 transition-colors"
+              title={theme === 'light' ? 'Switch to dark' : 'Switch to light'}
+            >
+              {theme === 'light' ? 'Dark' : 'Light'}
+            </button>
+            <button
+              onClick={async () => { try { await signOut(); } finally { navigate('/signin'); } }}
+              className="px-3 py-1.5 rounded-full bg-red-600 text-white hover:bg-red-700 text-xs transition-colors"
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
 
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-5 max-h-[70vh] overflow-y-auto">

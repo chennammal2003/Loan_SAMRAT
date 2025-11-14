@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Eye, Download, Copy, Mail, Phone, Edit3 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import DocsModal from './DocsModal';
 
 interface ProductLoan {
   id: string;
@@ -15,6 +16,7 @@ interface ProductLoan {
   tenure: number;
   processing_fee: number;
   status: string;
+  document: string;
   product_id?: string;
   product_name: string;
   product_image_url: string;
@@ -35,6 +37,7 @@ interface ProductLoanRow extends ProductLoan {
     sku: string | null;
   };
   merchant_name?: string;
+  documents_uploaded?: boolean;
 }
 
 export default function AdminProductLoans() {
@@ -44,9 +47,11 @@ export default function AdminProductLoans() {
   const [statusChangeLoan, setStatusChangeLoan] = useState<ProductLoanRow | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [refFilter, setRefFilter] = useState<'All'|'Referred'|'Direct'>('All');
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const pageSize = 10;
+  const [showDocsFor, setShowDocsFor] = useState<ProductLoanRow | null>(null);
 
   useEffect(() => {
     fetchLoans();
@@ -98,6 +103,19 @@ export default function AdminProductLoans() {
         merchantsData = result.data;
       }
 
+      // Fetch uploaded documents for these product loans
+      const loanIds = productLoansData?.map(pl => pl.id) || [];
+      let docsSet = new Set<string>();
+      if (loanIds.length > 0) {
+        const { data: docsData, error: docsError } = await supabase
+          .from('loan_documents')
+          .select('loan_id')
+          .in('loan_id', loanIds)
+          .eq('loan_type', 'product');
+        if (docsError) throw docsError;
+        docsSet = new Set((docsData || []).map(d => d.loan_id));
+      }
+
       // Build product map
       const productMap = new Map<string, { id: string; name: string; price: number; image_url: string; sku: string | null }>();
       productsData?.forEach(p => {
@@ -129,7 +147,8 @@ export default function AdminProductLoans() {
         return {
           ...loan,
           product,
-          merchant_name: merchantName
+          merchant_name: merchantName,
+          documents_uploaded: docsSet.has(loan.id)
         };
       }) || [];
 
@@ -147,6 +166,9 @@ export default function AdminProductLoans() {
     if (statusFilter !== 'All') {
       filtered = filtered.filter(l => l.status === statusFilter);
     }
+    if (refFilter !== 'All') {
+      filtered = filtered.filter(l => (refFilter === 'Referred') ? !!(l as any).referral_code : !(l as any).referral_code);
+    }
     
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -161,7 +183,7 @@ export default function AdminProductLoans() {
     }
     
     return filtered;
-  }, [loans, search, statusFilter]);
+  }, [loans, search, statusFilter, refFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredLoans.length / pageSize));
   const start = (page - 1) * pageSize;
@@ -316,6 +338,15 @@ export default function AdminProductLoans() {
             <option value="Rejected">Rejected</option>
             <option value="Loan Disbursed">Disbursed</option>
           </select>
+          <select
+            value={refFilter}
+            onChange={(e) => setRefFilter(e.target.value as any)}
+            className="px-4 py-2 border border-slate-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+          >
+            <option value="All">All Sources</option>
+            <option value="Referred">Referred</option>
+            <option value="Direct">Direct</option>
+          </select>
         </div>
         <button
           onClick={handleExportCSV}
@@ -346,6 +377,7 @@ export default function AdminProductLoans() {
                   </th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Loan ID</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Product</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Source</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Applicant Name</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Email</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Mobile</th>
@@ -353,6 +385,7 @@ export default function AdminProductLoans() {
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Tenure</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Processing Fee</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Status</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Documents</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Merchant</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Applied At</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Actions</th>
@@ -404,6 +437,16 @@ export default function AdminProductLoans() {
                           )}
                         </div>
                       </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {(loan as any).referral_code ? (
+                        <span className="inline-flex items-center gap-2 px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-200 text-xs font-medium" title={(loan as any).referral_code}>
+                          Referred
+                          <span className="font-mono">{String((loan as any).referral_code).slice(0,8)}…</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs">Direct</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <button
@@ -464,6 +507,22 @@ export default function AdminProductLoans() {
                       >
                         {loan.status}
                       </button>
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      {loan.documents_uploaded || loan.status === 'Loan Disbursed' || loan.status === 'Disbursed' ? (
+                        <button
+                          onClick={() => setShowDocsFor(loan)}
+                          className="inline-flex items-center space-x-2 px-3 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 text-xs"
+                        >
+                          <span>View Docs</span>
+                        </button>
+                      ) : loan.status === 'Accepted' ? (
+                        <span className="inline-flex px-2 py-1 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400 text-xs">Pending</span>
+                      ) : loan.status === 'Rejected' ? (
+                        <span className="inline-flex px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs">N/A</span>
+                      ) : (
+                        <span className="inline-flex px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs">N/A</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       {loan.merchant_name ? (
@@ -539,6 +598,7 @@ export default function AdminProductLoans() {
         <ProductLoanDetailsModal
           loan={selectedLoan}
           onClose={() => setSelectedLoan(null)}
+          onShowDocs={() => setShowDocsFor(selectedLoan)}
         />
       )}
 
@@ -549,12 +609,22 @@ export default function AdminProductLoans() {
           onStatusChange={handleStatusChange}
         />
       )}
+
+      {showDocsFor && (
+        <DocsModal
+          loanId={showDocsFor.id}
+          fullName={`${showDocsFor.first_name} ${showDocsFor.last_name}`}
+          onClose={() => setShowDocsFor(null)}
+          loanType="product"
+          onlyAdditional={true}
+        />
+      )}
     </div>
   );
 }
 
 // Product Loan Details Modal
-function ProductLoanDetailsModal({ loan, onClose }: { loan: ProductLoanRow; onClose: () => void }) {
+function ProductLoanDetailsModal({ loan, onClose, onShowDocs }: { loan: ProductLoanRow; onClose: () => void; onShowDocs: () => void }) {
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -604,6 +674,14 @@ function ProductLoanDetailsModal({ loan, onClose }: { loan: ProductLoanRow; onCl
                 <p><span className="text-slate-600 dark:text-gray-400">Last Updated:</span> <span className="font-medium">{new Date(loan.updated_at).toLocaleString('en-IN')}</span></p>
               </div>
             </div>
+            <div className="col-span-2">
+              <button
+                onClick={onShowDocs}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-white"
+              >
+                <Download size={16} /> View Documents
+              </button>
+            </div>
           </div>
         </div>
         <div className="p-6 border-t border-slate-200 dark:border-gray-700 flex justify-end">
@@ -629,7 +707,16 @@ function ProductLoanStatusModal({
   onClose: () => void;
   onStatusChange: (loanId: string, newStatus: string) => void;
 }) {
-  const [selectedStatus, setSelectedStatus] = useState<string>(loan.status);
+  // Determine allowed next statuses based on current status
+  const current = loan.status;
+  const allowedNext: string[] = (() => {
+    if (current === 'Pending') return ['Accepted', 'Rejected'];
+    if (current === 'Accepted') return ['Verified'];
+    if (current === 'Verified') return ['Loan Disbursed'];
+    return [];
+  })();
+
+  const [selectedStatus, setSelectedStatus] = useState<string>(allowedNext[0] || loan.status);
   const [comment, setComment] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -690,22 +777,29 @@ function ProductLoanStatusModal({
             <p className="text-sm text-slate-600 dark:text-gray-400">{loan.status}</p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">
-              New Status
-            </label>
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="w-full px-4 py-2 border border-slate-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            >
-              <option value="Pending">Pending</option>
-              <option value="Verified">Verified</option>
-              <option value="Accepted">Accepted</option>
-              <option value="Rejected">Rejected</option>
-              <option value="Loan Disbursed">Loan Disbursed</option>
-            </select>
-          </div>
+          {allowedNext.length > 0 ? (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">
+                New Status
+              </label>
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="w-full px-4 py-2 border border-slate-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              >
+                {allowedNext.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">
+                New Status
+              </label>
+              <p className="text-sm text-slate-500 dark:text-gray-400">No further changes allowed.</p>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">
@@ -731,7 +825,7 @@ function ProductLoanStatusModal({
           </button>
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || allowedNext.length === 0}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             <Edit3 size={16} />

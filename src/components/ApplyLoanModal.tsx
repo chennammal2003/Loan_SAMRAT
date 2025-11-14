@@ -23,6 +23,7 @@ export interface LoanFormData {
   tenure: string;
   processingFee: number;
   gstAccepted: boolean;
+  selectedProducts: { id: string; name: string; price: number }[];
 
   firstName: string;
   lastName: string;
@@ -71,6 +72,7 @@ const initialFormData: LoanFormData = {
   tenure: '',
   processingFee: 0,
   gstAccepted: false,
+  selectedProducts: [],
 
   firstName: '',
   lastName: '',
@@ -141,7 +143,7 @@ export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalPro
     const newErrors: Record<string, string> = {};
 
     // Step 1: Loan Details
-    if (!formData.interestScheme) newErrors.interestScheme = 'Required';
+    if (!formData.selectedProducts || formData.selectedProducts.length === 0) newErrors.selectedProducts = 'Please choose at least one product';
     if (!formData.goldPriceLockDate) newErrors.goldPriceLockDate = 'Required';
     if (!formData.proformaInvoice) newErrors.proformaInvoice = 'Required';
     if (!formData.loanAmount) newErrors.loanAmount = 'Required';
@@ -194,7 +196,7 @@ export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalPro
   const computeStepErrors = (step: number): Record<string, string> => {
     const e: Record<string, string> = {};
     if (step === 1) {
-      if (!formData.interestScheme) e.interestScheme = 'Required';
+      if (!formData.selectedProducts || formData.selectedProducts.length === 0) e.selectedProducts = 'Please choose at least one product';
       if (!formData.goldPriceLockDate) e.goldPriceLockDate = 'Required';
       if (!formData.proformaInvoice) e.proformaInvoice = 'Required';
       if (!formData.loanAmount) e.loanAmount = 'Required';
@@ -367,6 +369,24 @@ export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalPro
         }
 
         // 2) Insert loan after successful uploads
+        const interestSchemeIds = (formData.selectedProducts || []).map(p => p.id).join(',');
+        const selectedProductsPayload = (formData.selectedProducts || []).map(p => ({ id: p.id, name: p.name, price: p.price }));
+        // Try to fetch referral code for this merchant
+        let referralCode: string | null = null;
+        try {
+          const { data: mp } = await supabase
+            .from('merchant_profiles')
+            .select('referral_code')
+            .eq('merchant_id', profile.id)
+            .maybeSingle();
+          referralCode = (mp as any)?.referral_code || null;
+        } catch (_) {}
+        // ensure tenure is a valid positive integer to satisfy DB check constraint
+        const tenureToInsert = (() => {
+          const t = parseInt(String(formData.tenure), 10);
+          if (Number.isFinite(t) && t > 0) return t;
+          return 12; // safe default
+        })();
         const { data: loanData, error: loanError } = await supabase
           .from('loans')
           .insert({
@@ -396,11 +416,11 @@ export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalPro
             reference2_address: formData.reference2Address,
             reference2_contact: formData.reference2Contact,
             reference2_relationship: formData.reference2Relationship,
-            interest_scheme: formData.interestScheme,
+            interest_scheme: interestSchemeIds,
             gold_price_lock_date: formData.goldPriceLockDate,
             down_payment_details: formData.downPaymentDetails,
             loan_amount: parseFloat(formData.loanAmount),
-            tenure: parseInt(formData.tenure),
+            tenure: tenureToInsert,
             processing_fee: formData.processingFee,
             status: 'Pending',
             declaration_accepted: formData.declarationAccepted,
@@ -409,6 +429,18 @@ export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalPro
           .single();
 
         if (loanError || !loanData) throw loanError || new Error('Failed to create loan');
+
+        // 3) Insert into product_loans with referral
+        try {
+          await supabase.from('product_loans').insert({
+            loan_id: loanData.id,
+            referral_code: referralCode,
+            products: selectedProductsPayload,
+            total_amount: parseFloat(formData.loanAmount),
+          });
+        } catch (_) {
+          // ignore if table/columns not present; main loan row already created
+        }
 
         // 3) Insert loan_documents mapping
         if (uploadedFiles.length > 0) {
@@ -442,7 +474,7 @@ export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalPro
               loan: {
                 amount: parseFloat(formData.loanAmount),
                 tenure: parseInt(formData.tenure),
-                interestScheme: formData.interestScheme,
+                interestScheme: interestSchemeIds,
                 processingFee: formData.processingFee,
                 goldPriceLockDate: formData.goldPriceLockDate,
               },

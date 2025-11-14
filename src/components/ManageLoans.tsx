@@ -372,6 +372,7 @@ export default function ManageLoans({ initialStatusFilter = 'All' }: ManageLoans
           loanId={showDocsFor.id}
           fullName={`${showDocsFor.first_name} ${showDocsFor.last_name}`}
           onClose={() => setShowDocsFor(null)}
+          onlyAdditional={true}
         />
       )}
 

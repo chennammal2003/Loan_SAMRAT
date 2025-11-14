@@ -17,6 +17,10 @@ interface ProductFormData {
   stockQty: string;
   imageUrl: string;
   image: File | null;
+  thumbnailUrl: string;
+  thumbnail: File | null;
+  galleryUrls: string; // comma or newline separated URLs
+  galleryFiles: File[];
   makingCharge: string;
   color: string;
   dimensions: string;
@@ -84,6 +88,8 @@ interface ProductRecord {
   price: number | null;
   image_url: string | null;
   image_path: string | null;
+  thumbnail_url?: string | null;
+  thumbnail_path?: string | null;
   category?: string | null;
   purity?: string | null;
   weight?: number | null;
@@ -139,9 +145,13 @@ export default function Product() {
   const [info, setInfo] = useState<string | null>(null);
   const [editingProduct, setEditingProduct] = useState<ProductRecord | null>(null);
   const [viewingProduct, setViewingProduct] = useState<ProductRecord | null>(null);
+  const [viewingGalleryUrls, setViewingGalleryUrls] = useState<string[]>([]); // first 4 for collage
+  const [viewingAllGalleryUrls, setViewingAllGalleryUrls] = useState<string[]>([]); // all for strip/grid
+  const [viewingGalleryCount, setViewingGalleryCount] = useState<number>(0);
   const [deleteTarget, setDeleteTarget] = useState<ProductRecord | null>(null);
   const [activeTab, setActiveTab] = useState<ProductsSubTab>('list');
   const [stockEdits, setStockEdits] = useState<Record<string, string>>({});
+  const [galleryCount, setGalleryCount] = useState<number>(0);
   // Filters state (client-side only)
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
@@ -169,6 +179,10 @@ export default function Product() {
     stockQty: '',
     imageUrl: '',
     image: null,
+    thumbnailUrl: '',
+    thumbnail: null,
+    galleryUrls: '',
+    galleryFiles: [],
     makingCharge: '',
     color: '',
     dimensions: '',
@@ -181,8 +195,8 @@ export default function Product() {
     hallmarkCertNumber: '',
     bisHallmarkType: '',
     netWeight: '',
-    stoneWeight: '',
-    wastageWeight: '',
+    careInstructions: '',
+    availability: '',
     stoneType: '',
     stoneCount: '',
     stoneClarity: '',
@@ -299,6 +313,7 @@ export default function Product() {
     setEditingProduct(null);
     setCurrentStep(0);
     setProductFinance({ interest_rate: '', tenure: '' });
+    setGalleryCount(0);
     setFormData({
       name: '',
       description: '',
@@ -312,6 +327,10 @@ export default function Product() {
       stockQty: '',
       imageUrl: '',
       image: null,
+      thumbnailUrl: '',
+      thumbnail: null,
+      galleryUrls: '',
+      galleryFiles: [],
       makingCharge: '',
       color: '',
       dimensions: '',
@@ -373,6 +392,11 @@ export default function Product() {
     }));
   };
 
+  const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setFormData((prev) => ({ ...prev, thumbnail: file }));
+  };
+
   const handleCertificateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     setFormData((prev) => ({ ...prev, certificateFile: file }));
@@ -381,6 +405,36 @@ export default function Product() {
   const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     setFormData((prev) => ({ ...prev, productVideoFile: file }));
+  };
+
+  const handleGalleryFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    setFormData((prev) => ({ ...prev, galleryFiles: files }));
+  };
+
+  const handleGalleryFileAtIndex = (index: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setFormData((prev) => {
+      const next = [...prev.galleryFiles];
+      // Ensure length
+      while (next.length < galleryCount) next.push(undefined as unknown as File);
+      if (file) {
+        next[index] = file;
+      } else {
+        // remove entry if cleared
+        next[index] = undefined as unknown as File;
+      }
+      // Filter out undefined holes
+      const compact = next.filter(Boolean) as File[];
+      return { ...prev, galleryFiles: compact };
+    });
+  };
+
+  const parseGalleryUrls = (text: string): string[] => {
+    return text
+      .split(/\n|,/) // newline or comma
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
   };
 
   const uploadImage = async (file: File, ownerId: string) => {
@@ -395,6 +449,48 @@ export default function Product() {
       .getPublicUrl(image_path);
     const image_url = publicUrl.publicUrl;
     return { image_path, image_url } as const;
+  };
+
+  const uploadThumbnail = async (file: File, ownerId: string) => {
+    const fileName = `${crypto.randomUUID()}-${file.name.replace(/\s+/g, '-')}`;
+    const thumb_path = `${ownerId}/${fileName}`;
+
+    const tryUpload = async (bucket: string) => {
+      const { error: uploadError } = await supabase.storage
+        .from(bucket)
+        .upload(thumb_path, file, { upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: publicUrl } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(thumb_path);
+      const thumb_url = publicUrl.publicUrl;
+      return { thumb_path, thumb_url } as const;
+    };
+
+    try {
+      return await tryUpload('product-thumbnails');
+    } catch (e: any) {
+      const msg = (e?.message || '').toLowerCase();
+      if (msg.includes('bucket') && msg.includes('not') && msg.includes('found')) {
+        // Fallback to main images bucket if thumbnails bucket is missing
+        return await tryUpload('product-images');
+      }
+      throw e;
+    }
+  };
+
+  const removeThumbnailPath = async (path: string) => {
+    // Try remove from thumbnails bucket first, then fallback to images
+    try {
+      await supabase.storage.from('product-thumbnails').remove([path]);
+      return;
+    } catch (_e) {
+      try {
+        await supabase.storage.from('product-images').remove([path]);
+      } catch (_ignored) {
+        // swallow; non-fatal if already deleted or bucket missing
+      }
+    }
   };
 
   const uploadFileToBucket = async (bucket: string, file: File, ownerId: string) => {
@@ -426,6 +522,10 @@ export default function Product() {
       stockQty: p.stock_qty != null ? String(p.stock_qty) : '',
       imageUrl: p.image_url ?? '',
       image: null,
+      thumbnailUrl: p.thumbnail_url ?? '',
+      thumbnail: null,
+      galleryUrls: '',
+      galleryFiles: [],
       makingCharge: '',
       color: p.color ?? '',
       dimensions: p.dimensions ?? '',
@@ -466,6 +566,7 @@ export default function Product() {
       careInstructions: p.care_instructions ?? '',
       availability: p.availability ?? '',
     });
+    setGalleryCount(0);
     setIsModalOpen(true);
   };
 
@@ -476,6 +577,34 @@ export default function Product() {
   const handleViewClose = () => {
     setViewingProduct(null);
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!viewingProduct) {
+        setViewingGalleryUrls([]);
+        setViewingAllGalleryUrls([]);
+        setViewingGalleryCount(0);
+        return;
+      }
+      try {
+        const { data, error, count } = await supabase
+          .from('product_images')
+          .select('image_url', { count: 'exact' })
+          .eq('product_id', viewingProduct.id)
+          .order('sort_order', { ascending: true });
+        if (!cancelled && !error) {
+          const all = (data || []).map((r: any) => r.image_url).filter(Boolean);
+          setViewingAllGalleryUrls(all);
+          setViewingGalleryUrls(all.slice(0, 4));
+          setViewingGalleryCount(typeof count === 'number' ? count : all.length);
+        }
+      } catch (_) {
+        // ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [viewingProduct?.id]);
 
   const handleDelete = async (p: ProductRecord) => {
     setDeleteTarget(p);
@@ -494,6 +623,23 @@ export default function Product() {
 
       if (p.image_path) {
         await supabase.storage.from('product-images').remove([p.image_path]);
+      }
+      if (p.thumbnail_path) {
+        await removeThumbnailPath(p.thumbnail_path);
+      }
+      // Remove gallery images from storage and table
+      try {
+        const { data: gallery } = await supabase
+          .from('product_images')
+          .select('image_path')
+          .eq('product_id', p.id);
+        const paths = (gallery || []).map((g: any) => g.image_path).filter(Boolean);
+        if (paths.length) {
+          await supabase.storage.from('product-images').remove(paths);
+        }
+        await supabase.from('product_images').delete().eq('product_id', p.id);
+      } catch (_e) {
+        // non-fatal
       }
 
       setProducts((prev) => prev.filter((it) => it.id !== p.id));
@@ -526,9 +672,23 @@ export default function Product() {
       const wastageWeightNumber = formData.wastageWeight ? Number(formData.wastageWeight) : null;
       const stoneCountNumber = formData.stoneCount ? Number(formData.stoneCount) : null;
 
+      // Prepare gallery rows from files and URLs (used in both edit and insert flows)
+      const galleryRows: { image_url: string; image_path: string | null }[] = [];
+      if (formData.galleryFiles && formData.galleryFiles.length > 0) {
+        for (const f of formData.galleryFiles) {
+          const up = await uploadFileToBucket('product-images', f, user.id);
+          galleryRows.push({ image_url: up.url, image_path: up.file_path });
+        }
+      }
+      for (const u of parseGalleryUrls(formData.galleryUrls)) {
+        galleryRows.push({ image_url: u, image_path: null });
+      }
+
       if (editingProduct) {
         let image_path = editingProduct.image_path;
         let image_url = editingProduct.image_url;
+        let thumbnail_path = editingProduct.thumbnail_path ?? null;
+        let thumbnail_url = editingProduct.thumbnail_url ?? null;
         let certificate_url = editingProduct.certificate_url ?? null;
         let product_video_url = editingProduct.product_video_url ?? null;
 
@@ -542,6 +702,18 @@ export default function Product() {
         } else if (formData.imageUrl) {
           image_url = formData.imageUrl;
           image_path = editingProduct.image_path ?? null;
+        }
+
+        if (formData.thumbnail) {
+          if (thumbnail_path) {
+            await supabase.storage.from('product-thumbnails').remove([thumbnail_path]);
+          }
+          const uploaded = await uploadThumbnail(formData.thumbnail, user.id);
+          thumbnail_path = uploaded.thumb_path;
+          thumbnail_url = uploaded.thumb_url;
+        } else if (formData.thumbnailUrl) {
+          thumbnail_url = formData.thumbnailUrl;
+          thumbnail_path = editingProduct.thumbnail_path ?? null;
         }
 
         if (formData.certificateFile) {
@@ -558,6 +730,8 @@ export default function Product() {
           product_video_url = formData.productVideoUrl;
         }
 
+        // galleryRows already prepared above; we only append new rows without deleting existing ones
+
         // Attempt update with finance fields (if columns exist)
         const updatePayload: any = {
           name: formData.name,
@@ -565,6 +739,8 @@ export default function Product() {
           price: priceNumber,
           image_path,
           image_url,
+          thumbnail_path,
+          thumbnail_url,
           category: formData.category || null,
           purity: formData.purity || null,
           weight: weightNumber,
@@ -606,6 +782,10 @@ export default function Product() {
           product_video_url: product_video_url,
           care_instructions: formData.careInstructions || null,
           availability: formData.availability || null,
+          seo_title: formData.seoTitle || null,
+          seo_description: formData.seoDescription || null,
+          seo_keywords: formData.seoKeywords || null,
+          slug: formData.slug || null,
         };
         const chosenInterest = productFinance.interest_rate || (nbfcTerms?.interest_rate != null ? String(nbfcTerms.interest_rate) : '');
         const chosenTenure = productFinance.tenure || (nbfcTerms?.default_tenure != null ? String(nbfcTerms.default_tenure) : '');
@@ -626,8 +806,14 @@ export default function Product() {
           updError = e;
         }
         if (updError) {
+          delete (updatePayload as any).thumbnail_path;
+          delete (updatePayload as any).thumbnail_url;
           delete (updatePayload as any).interest_rate;
           delete (updatePayload as any).tenure_months;
+          delete (updatePayload as any).seo_title;
+          delete (updatePayload as any).seo_description;
+          delete (updatePayload as any).seo_keywords;
+          delete (updatePayload as any).slug;
           const r2 = await supabase
             .from('products')
             .update(updatePayload)
@@ -639,11 +825,25 @@ export default function Product() {
           updData = r2.data;
         }
 
+        // Insert any new gallery rows (append)
+        if (galleryRows.length > 0) {
+          await supabase.from('product_images').insert(
+            galleryRows.map((r, idx) => ({
+              product_id: editingProduct.id,
+              image_url: r.image_url,
+              image_path: r.image_path,
+              sort_order: idx,
+            }))
+          );
+        }
+
         setProducts((prev) => prev.map((it) => (it.id === editingProduct.id ? (updData as ProductRecord) : it)));
         handleCloseModal();
       } else {
         let image_path: string | null = null;
         let image_url: string | null = null;
+        let thumbnail_path: string | null = null;
+        let thumbnail_url: string | null = null;
         let certificate_url: string | null = null;
         let product_video_url: string | null = null;
 
@@ -653,6 +853,13 @@ export default function Product() {
           image_url = uploaded.image_url;
         } else if (formData.imageUrl) {
           image_url = formData.imageUrl;
+        }
+        if (formData.thumbnail) {
+          const uploaded = await uploadThumbnail(formData.thumbnail, user.id);
+          thumbnail_path = uploaded.thumb_path;
+          thumbnail_url = uploaded.thumb_url;
+        } else if (formData.thumbnailUrl) {
+          thumbnail_url = formData.thumbnailUrl;
         }
         if (formData.certificateFile) {
           const uploaded = await uploadFileToBucket('product-certificates', formData.certificateFile, user.id);
@@ -674,6 +881,8 @@ export default function Product() {
           price: priceNumber,
           image_path,
           image_url,
+          thumbnail_path,
+          thumbnail_url,
           category: formData.category || null,
           purity: formData.purity || null,
           weight: weightNumber,
@@ -715,6 +924,10 @@ export default function Product() {
           product_video_url: product_video_url,
           care_instructions: formData.careInstructions || null,
           availability: formData.availability || null,
+          seo_title: formData.seoTitle || null,
+          seo_description: formData.seoDescription || null,
+          seo_keywords: formData.seoKeywords || null,
+          slug: formData.slug || null,
         };
         const insInterest = productFinance.interest_rate || (nbfcTerms?.interest_rate != null ? String(nbfcTerms.interest_rate) : '');
         const insTenure = productFinance.tenure || (nbfcTerms?.default_tenure != null ? String(nbfcTerms.default_tenure) : '');
@@ -733,8 +946,14 @@ export default function Product() {
           insErr = e;
         }
         if (insErr) {
+          delete (insertPayload as any).thumbnail_path;
+          delete (insertPayload as any).thumbnail_url;
           delete (insertPayload as any).interest_rate;
           delete (insertPayload as any).tenure_months;
+          delete (insertPayload as any).seo_title;
+          delete (insertPayload as any).seo_description;
+          delete (insertPayload as any).seo_keywords;
+          delete (insertPayload as any).slug;
           const r2 = await supabase
             .from('products')
             .insert(insertPayload)
@@ -745,6 +964,17 @@ export default function Product() {
         }
 
         setProducts((prev) => [insData as ProductRecord, ...prev]);
+        // Insert gallery rows for the newly created product
+        if (galleryRows.length > 0) {
+          await supabase.from('product_images').insert(
+            galleryRows.map((r, idx) => ({
+              product_id: (insData as any).id,
+              image_url: r.image_url,
+              image_path: r.image_path,
+              sort_order: idx,
+            }))
+          );
+        }
         handleCloseModal();
       }
     } catch (err: any) {
@@ -988,7 +1218,9 @@ export default function Product() {
                 </div>
 
                 <div className="aspect-square bg-gradient-to-br from-slate-100 to-slate-200 dark:from-gray-700 dark:to-gray-600 flex items-center justify-center overflow-hidden relative">
-                  {p.image_url ? (
+                  {p.thumbnail_url ? (
+                    <img src={p.thumbnail_url} alt={p.name} className="product-image w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105" />
+                  ) : p.image_url ? (
                     <img src={p.image_url} alt={p.name} className="product-image w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105" />
                   ) : (
                     <div className="text-slate-400 dark:text-gray-400 flex flex-col items-center gap-2">
@@ -1185,14 +1417,53 @@ export default function Product() {
 
               <div className="grid md:grid-cols-2 gap-0">
                 <div className="aspect-square bg-gradient-to-br from-slate-100 to-slate-200 dark:from-gray-700 dark:to-gray-600 flex items-center justify-center relative overflow-hidden">
-                  {viewingProduct.image_url ? (
-                    <img src={viewingProduct.image_url} alt={viewingProduct.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="text-slate-400 dark:text-gray-400 flex flex-col items-center gap-3">
-                      <Package className="w-20 h-20" />
-                      <span>No Image</span>
-                    </div>
-                  )}
+                  {(() => {
+                    const srcs = viewingGalleryUrls.length > 0 ? viewingGalleryUrls : (viewingProduct.image_url ? [viewingProduct.image_url] : []);
+                    const n = srcs.length;
+                    if (n <= 1) {
+                      return srcs[0] ? (
+                        <img src={srcs[0] as string} alt={viewingProduct.name} loading="lazy" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="text-slate-400 dark:text-gray-400 flex flex-col items-center gap-3 w-full h-full">
+                          <Package className="w-20 h-20" />
+                          <span>No Image</span>
+                        </div>
+                      );
+                    }
+                    if (n === 2) {
+                      return (
+                        <div className="grid grid-cols-2 w-full h-full">
+                          {srcs.slice(0, 2).map((u, i) => (
+                            <img key={i} src={u as string} alt={`${viewingProduct.name} ${i + 1}`} loading="lazy" className="w-full h-full object-cover" />
+                          ))}
+                        </div>
+                      );
+                    }
+                    if (n === 3) {
+                      return (
+                        <div className="grid grid-cols-2 grid-rows-2 w-full h-full">
+                          <img src={srcs[0] as string} alt={`${viewingProduct.name} 1`} loading="lazy" className="w-full h-full object-cover col-span-1 row-span-2" />
+                          <img src={srcs[1] as string} alt={`${viewingProduct.name} 2`} loading="lazy" className="w-full h-full object-cover" />
+                          <img src={srcs[2] as string} alt={`${viewingProduct.name} 3`} loading="lazy" className="w-full h-full object-cover" />
+                        </div>
+                      );
+                    }
+                    const extra = Math.max(0, (viewingGalleryCount || srcs.length) - 4);
+                    return (
+                      <div className="grid grid-cols-2 grid-rows-2 w-full h-full">
+                        {srcs.slice(0, 4).map((u, i) => (
+                          <div key={i} className="relative w-full h-full">
+                            <img src={u as string} alt={`${viewingProduct.name} ${i + 1}`} loading="lazy" className="w-full h-full object-cover" />
+                            {extra > 0 && i === 3 && (
+                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                <span className="text-white font-semibold text-lg">+{extra}</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   {viewingProduct.discount_percent && viewingProduct.discount_percent > 0 && (
                     <div className="absolute top-4 left-4 bg-gradient-to-r from-red-500 to-pink-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg">
                       {viewingProduct.discount_percent}% OFF
@@ -1224,6 +1495,17 @@ export default function Product() {
                             ₹{(viewingProduct.price / (1 - viewingProduct.discount_percent / 100)).toFixed(0)}
                           </span>
                         )}
+                      </div>
+                    </div>
+                  )}
+
+                  {viewingAllGalleryUrls.length > 0 && (
+                    <div>
+                      <div className="text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">All Images</div>
+                      <div className="grid grid-cols-4 gap-2">
+                        {viewingAllGalleryUrls.map((u, i) => (
+                          <img key={i} src={u} alt={`${viewingProduct.name} ${i + 1}`} className="w-full h-20 object-cover rounded-md border border-slate-200 dark:border-gray-700" />
+                        ))}
                       </div>
                     </div>
                   )}
@@ -1373,14 +1655,14 @@ export default function Product() {
             </div>
 
             <div className="px-6 pt-4">
-              <ol className="grid grid-cols-5 gap-2">
-                {['Product Type','Details','Specification','SEO','Pricing'].map((label, idx) => (
+              <ol className="grid grid-cols-4 gap-2">
+                {['Product Type','Details','Specification','Pricing'].map((label, idx) => (
                   <li key={label} className={`text-xs sm:text-sm px-3 py-2 rounded-lg border ${idx === currentStep ? 'border-blue-600 text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-gray-700 text-slate-600 dark:text-gray-300'}`}>{label}</li>
                 ))}
               </ol>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[70vh]">
+             <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[70vh]">
               {(() => {
                 if (rates === null && !ratesError) {
                   const ctrl = new AbortController();
@@ -1730,7 +2012,8 @@ export default function Product() {
                 </div>
               )}
 
-              {currentStep === 3 && (
+              {/* Pricing & Media Step */}
+              {currentStep === 3 && (<>
                 <div className="space-y-5">
                   <div>
                     <label htmlFor="imageUrl" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Image URL (optional)</label>
@@ -1756,174 +2039,181 @@ export default function Product() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Upload Certificate (PDF/Image)</label>
-                    <input type="file" accept="image/*,application/pdf" onChange={handleCertificateChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
-                    <input type="url" placeholder="Or certificate URL" value={formData.certificateUrl} onChange={(e) => setFormData((p) => ({ ...p, certificateUrl: e.target.value }))} className="mt-2 w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Upload Thumbnail</label>
+                    <input type="file" accept="image/*" onChange={handleThumbnailChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    <input type="url" placeholder="Or thumbnail URL" value={formData.thumbnailUrl} onChange={(e) => setFormData((p) => ({ ...p, thumbnailUrl: e.target.value }))} className="mt-2 w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Upload Video (optional)</label>
-                    <input type="file" accept="video/*" onChange={handleVideoChange} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
-                    <input type="url" placeholder="Or video URL" value={formData.productVideoUrl} onChange={(e) => setFormData((p) => ({ ...p, productVideoUrl: e.target.value }))} className="mt-2 w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                    <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Number of Gallery Images</label>
+                    <select value={galleryCount} onChange={(e)=> setGalleryCount(parseInt(e.target.value||'0')||0)} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl">
+                      {[0,1,2,3,4,5,6,7,8,9,10].map(n=> (<option key={n} value={n}>{n}</option>))}
+                    </select>
+                    {galleryCount > 0 && (
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {Array.from({ length: galleryCount }).map((_, idx) => (
+                          <div key={idx}>
+                            <label className="block text-xs font-medium text-slate-600 dark:text-gray-400 mb-1">Gallery Image {idx+1}</label>
+                            <input type="file" accept="image/*" onChange={handleGalleryFileAtIndex(idx)} className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <textarea placeholder="Or paste multiple gallery URLs (comma/newline separated)" value={formData.galleryUrls} onChange={(e)=> setFormData((p)=> ({ ...p, galleryUrls: e.target.value }))} rows={3} className="mt-3 w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl" />
                   </div>
                 </div>
-              )}
-
-              {currentStep === 4 && (
-                <div className="space-y-5">
-                  {/* NBFC Finance Terms */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Interest Rate (% p.a)</label>
-                      <input
-                        value={productFinance.interest_rate || (nbfcTerms?.interest_rate != null ? String(nbfcTerms.interest_rate) : '')}
-                        onChange={(e)=>setProductFinance((p)=>({ ...p, interest_rate: e.target.value }))}
-                        readOnly
-                        className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-slate-900 dark:text-gray-100 rounded-xl"
-                        placeholder="-"
-                        title={nbfcTerms?.interest_rate != null ? `From NBFC: ${nbfcTerms.interest_rate}%` : 'No tie-up terms found'}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Tenure (months)</label>
-                      <select
-                        value={productFinance.tenure || (nbfcTerms?.default_tenure != null ? String(nbfcTerms.default_tenure) : '')}
-                        onChange={(e)=>setProductFinance((p)=>({ ...p, tenure: e.target.value }))}
-                        className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl"
-                      >
-                        <option value="" disabled>{nbfcTerms?.default_tenure ? `Default: ${nbfcTerms.default_tenure} months` : 'Select tenure'}</option>
-                        {[3,6,9,12,18,24,36].map(m => (
-                          <option key={m} value={m}>{m} months</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="makingCharge" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Making Charge (₹)</label>
-                      <input
-                        type="number"
-                        id="makingCharge"
-                        name="makingCharge"
-                        value={formData.makingCharge}
-                        onChange={handleInputChange}
-                        step="0.01"
-                        min="0"
-                        className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                        placeholder="e.g., 1500"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="price" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Final Price (₹)</label>
-                      <input
-                        type="number"
-                        id="price"
-                        name="price"
-                        value={formData.price}
-                        onChange={handleInputChange}
-                        required
-                        step="0.01"
-                        min="0"
-                        className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                        placeholder="0.00"
-                      />
-                    </div>
-                  </div>
-                  {(() => {
-                    const weight = parseFloat(formData.weight || '0');
-                    const making = parseFloat(formData.makingCharge || '0');
-                    const metal = formData.metalType;
-                    const purity = formData.purity;
-                    let perGram = 0;
-                    if (rates) {
-                      if (metal === 'Gold') {
-                        const karat = purity.endsWith('K') ? parseInt(purity) : 24;
-                        const base24 = rates.perGram.gold24k;
-                        perGram = base24 * (karat / 24);
-                      } else if (metal === 'Silver') {
-                        perGram = rates.perGram.silver;
-                      }
-                    }
-                    const suggested = perGram > 0 && weight > 0 ? perGram * weight + making : null;
-                    return (
-                      <div className="rounded-xl border border-slate-200 dark:border-gray-700 p-3 text-sm flex items-center justify-between">
-                        <div className="text-slate-600 dark:text-gray-300">
-                          {rates ? (
-                            suggested != null ? (
-                              <span>Suggested price from live rate: <b>₹{Math.round(suggested).toLocaleString('en-IN')}</b></span>
-                            ) : (
-                              <span>Enter metal, purity, and weight to see suggested price</span>
-                            )
-                          ) : (
-                            <span>Fetching live metal rates…</span>
-                          )}
-                        </div>
-                        <div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (suggested != null) {
-                                setFormData((prev) => ({ ...prev, price: String(Math.round(suggested)) }));
-                              }
-                            }}
-                            className="px-3 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-60"
-                            disabled={suggested == null}
-                          >
-                            Use live price
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="discountPercent" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Discount (%)</label>
-                      <input
-                        type="number"
-                        id="discountPercent"
-                        name="discountPercent"
-                        value={formData.discountPercent}
-                        onChange={handleInputChange}
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                        placeholder="e.g., 5"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="stockQty" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Stock Quantity</label>
-                      <input
-                        type="number"
-                        id="stockQty"
-                        name="stockQty"
-                        value={formData.stockQty}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="1"
-                        required
-                        className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                        placeholder="e.g., 10"
-                      />
-                    </div>
-                  </div>
-
+                {/* NBFC Finance Terms */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="shippingCharge" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Shipping Charge (₹)</label>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Interest Rate (% p.a)</label>
+                    <input
+                      value={productFinance.interest_rate || (nbfcTerms?.interest_rate != null ? String(nbfcTerms.interest_rate) : '')}
+                      onChange={(e)=>setProductFinance((p)=>({ ...p, interest_rate: e.target.value }))}
+                      readOnly
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-slate-900 dark:text-gray-100 rounded-xl"
+                      placeholder="-"
+                      title={nbfcTerms?.interest_rate != null ? `From NBFC: ${nbfcTerms.interest_rate}%` : 'No tie-up terms found'}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Tenure (months)</label>
+                    <select
+                      value={productFinance.tenure || (nbfcTerms?.default_tenure != null ? String(nbfcTerms.default_tenure) : '')}
+                      onChange={(e)=>setProductFinance((p)=>({ ...p, tenure: e.target.value }))}
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl"
+                    >
+                      <option value="" disabled>{nbfcTerms?.default_tenure ? `Default: ${nbfcTerms.default_tenure} months` : 'Select tenure'}</option>
+                      {[3,6,9,12,18,24,36].map(m => (
+                        <option key={m} value={m}>{m} months</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="makingCharge" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Making Charge (₹)</label>
                     <input
                       type="number"
-                      id="shippingCharge"
-                      name="shippingCharge"
-                      value={formData.shippingCharge}
+                      id="makingCharge"
+                      name="makingCharge"
+                      value={formData.makingCharge}
                       onChange={handleInputChange}
-                      min="0"
                       step="0.01"
+                      min="0"
                       className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                      placeholder="e.g., 99"
+                      placeholder="e.g., 1500"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="price" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Final Price (₹)</label>
+                    <input
+                      type="number"
+                      id="price"
+                      name="price"
+                      value={formData.price}
+                      onChange={handleInputChange}
+                      required
+                      step="0.01"
+                      min="0"
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                      placeholder="0.00"
                     />
                   </div>
                 </div>
-              )}
+                {(() => {
+                  const weight = parseFloat(formData.weight || '0');
+                  const making = parseFloat(formData.makingCharge || '0');
+                  const metal = formData.metalType;
+                  const purity = formData.purity;
+                  let perGram = 0;
+                  if (rates) {
+                    if (metal === 'Gold') {
+                      const karat = purity.endsWith('K') ? parseInt(purity) : 24;
+                      const base24 = rates.perGram.gold24k;
+                      perGram = base24 * (karat / 24);
+                    } else if (metal === 'Silver') {
+                      perGram = rates.perGram.silver;
+                    }
+                  }
+                  const suggested = perGram > 0 && weight > 0 ? perGram * weight + making : null;
+                  return (
+                    <div className="rounded-xl border border-slate-200 dark:border-gray-700 p-3 text-sm flex items-center justify-between">
+                      <div className="text-slate-600 dark:text-gray-300">
+                        {rates ? (
+                          suggested != null ? (
+                            <span>Suggested price from live rate: <b>₹{Math.round(suggested).toLocaleString('en-IN')}</b></span>
+                          ) : (
+                            <span>Enter metal, purity, and weight to see suggested price</span>
+                          )
+                        ) : (
+                          <span>Fetching live metal rates…</span>
+                        )}
+                      </div>
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (suggested != null) {
+                              setFormData((prev) => ({ ...prev, price: String(Math.round(suggested)) }));
+                            }
+                          }}
+                          className="px-3 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-60"
+                          disabled={suggested == null}
+                        >
+                          Use live price
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="discountPercent" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Discount (%)</label>
+                    <input
+                      type="number"
+                      id="discountPercent"
+                      name="discountPercent"
+                      value={formData.discountPercent}
+                      onChange={handleInputChange}
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                      placeholder="e.g., 5"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="stockQty" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Stock Quantity</label>
+                    <input
+                      type="number"
+                      id="stockQty"
+                      name="stockQty"
+                      value={formData.stockQty}
+                      onChange={handleInputChange}
+                      min="0"
+                      step="1"
+                      required
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                      placeholder="e.g., 10"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="shippingCharge" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">Shipping Charge (₹)</label>
+                  <input
+                    type="number"
+                    id="shippingCharge"
+                    name="shippingCharge"
+                    value={formData.shippingCharge}
+                    onChange={handleInputChange}
+                    min="0"
+                    step="0.01"
+                    className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                    placeholder="e.g., 99"
+                  />
+                </div>
+              </>)}
 
               <div className="mt-8 flex gap-3">
                 <button
@@ -1942,10 +2232,10 @@ export default function Product() {
                     Back
                   </button>
                 )}
-                {currentStep < 4 ? (
+                {currentStep < 3 ? (
                   <button
                     type="button"
-                    onClick={() => setCurrentStep((s) => Math.min(4, s + 1))}
+                    onClick={() => setCurrentStep((s) => Math.min(3, s + 1))}
                     className="ml-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-all duration-300 shadow-lg hover:shadow-xl"
                   >
                     Next

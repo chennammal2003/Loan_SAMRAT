@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Wallet, Tag, Weight, Sparkles } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 interface Product {
   id: string;
@@ -34,6 +35,8 @@ export default function ProductDetailModal({ product, onClose }: ProductDetailMo
 
   const [tenure, setTenure] = React.useState<number>(6);
   const [monthlyRate, setMonthlyRate] = React.useState<number>(0.03); // 3% default
+  const [galleryUrls, setGalleryUrls] = React.useState<string[]>([]);
+  const [galleryCount, setGalleryCount] = React.useState<number>(0);
   const emi = React.useMemo(() => {
     const P = discountedPrice;
     const r = monthlyRate;
@@ -42,6 +45,27 @@ export default function ProductDetailModal({ product, onClose }: ProductDetailMo
     const pow = Math.pow(1 + r, n);
     return Math.round((P * r * pow) / (pow - 1));
   }, [discountedPrice, monthlyRate, tenure]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error, count } = await supabase
+          .from('product_images')
+          .select('image_url', { count: 'exact' })
+          .eq('product_id', product.id)
+          .order('sort_order', { ascending: true })
+          .limit(4);
+        if (!cancelled && !error && Array.isArray(data)) {
+          setGalleryUrls((data as any[]).map((r) => r.image_url).filter(Boolean));
+          setGalleryCount(typeof count === 'number' ? count : (data as any[]).length);
+        }
+      } catch (_) {
+        // ignore fetch errors; fallback to main image
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [product.id]);
 
   const handleAddToCart = () => {
     add({ id: product.id, name: product.name, price: discountedPrice, image_url: product.image_url });
@@ -71,12 +95,50 @@ export default function ProductDetailModal({ product, onClose }: ProductDetailMo
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-6">
             <div className="space-y-4">
               <div className="relative aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-amber-50 to-yellow-50 shadow-lg">
-                <img
-                  src={product.image_url}
-                  alt={product.name}
-                  loading="lazy"
-                  className="w-full h-full object-cover"
-                />
+                {(() => {
+                  const srcs = galleryUrls.length > 0 ? galleryUrls : (product.image_url ? [product.image_url] : []);
+                  const n = srcs.length;
+                  if (n <= 1) {
+                    return srcs[0] ? (
+                      <img src={srcs[0]} alt={product.name} loading="lazy" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full" />
+                    );
+                  }
+                  if (n === 2) {
+                    return (
+                      <div className="grid grid-cols-2 w-full h-full">
+                        {srcs.slice(0, 2).map((u, i) => (
+                          <img key={i} src={u} alt={`${product.name} ${i + 1}`} loading="lazy" className="w-full h-full object-cover" />
+                        ))}
+                      </div>
+                    );
+                  }
+                  if (n === 3) {
+                    return (
+                      <div className="grid grid-cols-2 grid-rows-2 w-full h-full">
+                        <img src={srcs[0]} alt={`${product.name} 1`} loading="lazy" className="w-full h-full object-cover col-span-1 row-span-2" />
+                        <img src={srcs[1]} alt={`${product.name} 2`} loading="lazy" className="w-full h-full object-cover" />
+                        <img src={srcs[2]} alt={`${product.name} 3`} loading="lazy" className="w-full h-full object-cover" />
+                      </div>
+                    );
+                  }
+                  const extra = Math.max(0, (galleryCount || srcs.length) - 4);
+                  return (
+                    <div className="grid grid-cols-2 grid-rows-2 w-full h-full">
+                      {srcs.slice(0, 4).map((u, i) => (
+                        <div key={i} className="relative w-full h-full">
+                          <img src={u} alt={`${product.name} ${i + 1}`} loading="lazy" className="w-full h-full object-cover" />
+                          {extra > 0 && i === 3 && (
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                              <span className="text-white font-semibold text-lg">+{extra}</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
                 {product.discount_percent > 0 && (
                   <div className="absolute top-4 right-4 bg-gradient-to-r from-red-500 to-pink-500 text-white px-4 py-2 rounded-full text-sm font-bold shadow-lg flex items-center gap-2">
                     <Tag className="w-4 h-4" />

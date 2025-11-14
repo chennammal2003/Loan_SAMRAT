@@ -25,8 +25,10 @@ export default function LoanApplyPage() {
   const submit = async () => {
     setSubmitting(true);
     try {
-      // Optional: persist a loan application
-      await supabase.from('loan_applications').insert([{ user_id: user?.id, amount: amount || 0, tenure: tenure || 0, emi: emi || 0, ...form }]).catch(()=>{});
+      // Optional: persist a loan application (ignore error if table/columns missing)
+      const { error: _ignore } = await supabase
+        .from('loan_applications')
+        .insert([{ user_id: user?.id, amount: amount || 0, tenure: tenure || 0, emi: emi || 0, ...form }]);
       navigate('/customer/checkout', { state: { payType: 'emi' } });
     } finally {
       setSubmitting(false);

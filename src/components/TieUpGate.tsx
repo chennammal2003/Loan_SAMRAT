@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 // Gate for merchants: require an approved tie-up to access NBFC-dependent features
 export default function TieUpGate({ children }: { children: React.ReactNode }) {
-  const { profile } = useAuth();
+  const { profile, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [checking, setChecking] = useState(true);
@@ -13,6 +13,7 @@ export default function TieUpGate({ children }: { children: React.ReactNode }) {
   const [requestId, setRequestId] = useState<string | null>(null);
   const [reason, setReason] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [adminContact, setAdminContact] = useState<{ name?: string|null; email?: string|null; phone?: string|null } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,7 +34,7 @@ export default function TieUpGate({ children }: { children: React.ReactNode }) {
         // Else check requests
         const { data: req, error: reqErr } = await supabase
           .from('nbfc_tieup_requests')
-          .select('id,status,reason')
+          .select('id,status,reason, admin:user_profiles!nbfc_tieup_requests_admin_id_fkey(id,username,full_name,email,mobile,phone)')
           .eq('merchant_id', profile.id)
           .order('requested_at', { ascending: false })
           .maybeSingle();
@@ -42,6 +43,8 @@ export default function TieUpGate({ children }: { children: React.ReactNode }) {
             setRequestId(String(req.id));
             setState(req.status as any);
             setReason(req.reason || null);
+            const a = Array.isArray((req as any).admin) ? (req as any).admin[0] : (req as any).admin;
+            if (a) setAdminContact({ name: a.full_name || a.username || null, email: a.email || null, phone: a.mobile || a.phone || null } as any);
           } else {
             setState('none');
           }
@@ -99,9 +102,29 @@ export default function TieUpGate({ children }: { children: React.ReactNode }) {
             <>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Request sent — awaiting NBFC admin approval</h2>
               <p className="text-gray-600 dark:text-gray-400 mt-2">You cannot access NBFC-dependent features until approval.</p>
-              <div className="mt-4 flex gap-3">
+              {adminContact && (adminContact.name || adminContact.email || adminContact.phone) && (
+                <div className="mt-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/40 border border-gray-200 dark:border-gray-600 text-sm">
+                  <p className="text-gray-700 dark:text-gray-200 font-medium mb-1">NBFC Admin Contact:</p>
+                  {adminContact.name && (
+                    <p className="text-gray-600 dark:text-gray-300">Name: <span className="font-medium">{adminContact.name}</span></p>
+                  )}
+                  {adminContact.email && (
+                    <p className="text-gray-600 dark:text-gray-300">Email: <span className="font-medium">{adminContact.email}</span></p>
+                  )}
+                  {adminContact.phone && (
+                    <p className="text-gray-600 dark:text-gray-300">Mobile: <span className="font-medium">{adminContact.phone}</span></p>
+                  )}
+                </div>
+              )}
+              <div className="mt-4 flex gap-3 flex-wrap">
                 <button onClick={() => navigate('/nbfc/select')} className="px-4 py-2 rounded bg-gray-100 dark:bg-gray-700">Choose another NBFC</button>
                 <button onClick={cancelRequest} disabled={cancelling} className={`px-4 py-2 rounded text-white ${cancelling?'bg-red-400':'bg-red-600 hover:bg-red-700'}`}>{cancelling ? 'Cancelling...' : 'Cancel request'}</button>
+                <button
+                  onClick={async ()=>{ try { await signOut?.(); } finally { navigate('/signin', { replace: true }); } }}
+                  className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
+                >
+                  Sign Out
+                </button>
               </div>
             </>
           )}
@@ -109,9 +132,29 @@ export default function TieUpGate({ children }: { children: React.ReactNode }) {
             <>
               <h2 className="text-xl font-semibold text-red-700">Request rejected</h2>
               {reason && <p className="text-gray-600 dark:text-gray-400 mt-2">Reason: {reason}</p>}
-              <div className="mt-4 flex gap-3">
+              {adminContact && (adminContact.name || adminContact.email || adminContact.phone) && (
+                <div className="mt-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/40 border border-gray-200 dark:border-gray-600 text-sm">
+                  <p className="text-gray-700 dark:text-gray-200 font-medium mb-1">NBFC Admin Contact:</p>
+                  {adminContact.name && (
+                    <p className="text-gray-600 dark:text-gray-300">Name: <span className="font-medium">{adminContact.name}</span></p>
+                  )}
+                  {adminContact.email && (
+                    <p className="text-gray-600 dark:text-gray-300">Email: <span className="font-medium">{adminContact.email}</span></p>
+                  )}
+                  {adminContact.phone && (
+                    <p className="text-gray-600 dark:text-gray-300">Mobile: <span className="font-medium">{adminContact.phone}</span></p>
+                  )}
+                </div>
+              )}
+              <div className="mt-4 flex gap-3 flex-wrap">
                 <button onClick={() => navigate('/nbfc/select')} className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Choose another NBFC</button>
                 <button onClick={() => navigate('/dashboard')} className="px-4 py-2 rounded bg-gray-100 dark:bg-gray-700">Go to dashboard</button>
+                <button
+                  onClick={async ()=>{ try { await signOut?.(); } finally { navigate('/signin', { replace: true }); } }}
+                  className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
+                >
+                  Sign Out
+                </button>
               </div>
             </>
           )}
@@ -119,8 +162,28 @@ export default function TieUpGate({ children }: { children: React.ReactNode }) {
             <>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Request cancelled</h2>
               <p className="text-gray-600 dark:text-gray-400 mt-2">Select a different NBFC to continue.</p>
-              <div className="mt-4">
+              {adminContact && (adminContact.name || adminContact.email || adminContact.phone) && (
+                <div className="mt-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/40 border border-gray-200 dark:border-gray-600 text-sm">
+                  <p className="text-gray-700 dark:text-gray-200 font-medium mb-1">NBFC Admin Contact:</p>
+                  {adminContact.name && (
+                    <p className="text-gray-600 dark:text-gray-300">Name: <span className="font-medium">{adminContact.name}</span></p>
+                  )}
+                  {adminContact.email && (
+                    <p className="text-gray-600 dark:text-gray-300">Email: <span className="font-medium">{adminContact.email}</span></p>
+                  )}
+                  {adminContact.phone && (
+                    <p className="text-gray-600 dark:text-gray-300">Mobile: <span className="font-medium">{adminContact.phone}</span></p>
+                  )}
+                </div>
+              )}
+              <div className="mt-4 flex gap-3 flex-wrap">
                 <button onClick={() => navigate('/nbfc/select')} className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Go to NBFC selection</button>
+                <button
+                  onClick={async ()=>{ try { await signOut?.(); } finally { navigate('/signin', { replace: true }); } }}
+                  className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
+                >
+                  Sign Out
+                </button>
               </div>
             </>
           )}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Eye, Download, Lock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import DocsModal from './DocsModal';
 import { useAuth } from '../contexts/AuthContext';
 
 interface ProductLoan {
@@ -9,6 +10,7 @@ interface ProductLoan {
   first_name: string;
   last_name: string;
   email_id: string;
+  address?: string;
   mobile_primary: string;
   mobile_alternative?: string;
   loan_amount: number;
@@ -30,11 +32,14 @@ export default function MerchantProductLoans() {
   const [loans, setLoans] = useState<ProductLoan[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLoan, setSelectedLoan] = useState<ProductLoan | null>(null);
+  const [showDocsFor, setShowDocsFor] = useState<ProductLoan | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [refFilter, setRefFilter] = useState<'All'|'Referred'|'Direct'>('All');
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const pageSize = 10;
+  const [docsSet, setDocsSet] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (profile) {
@@ -69,6 +74,19 @@ export default function MerchantProductLoans() {
 
       if (productLoansError) throw productLoansError;
 
+      const loanIds = (productLoansData || []).map(pl => pl.id);
+      let newDocsSet = new Set<string>();
+      if (loanIds.length > 0) {
+        const { data: docsData, error: docsError } = await supabase
+          .from('loan_documents')
+          .select('loan_id')
+          .in('loan_id', loanIds)
+          .eq('loan_type', 'product');
+        if (docsError) throw docsError;
+        newDocsSet = new Set((docsData || []).map(d => d.loan_id));
+      }
+
+      setDocsSet(newDocsSet);
       setLoans(productLoansData || []);
     } catch (error) {
       console.error('Error fetching product loans:', error);
@@ -83,6 +101,9 @@ export default function MerchantProductLoans() {
     if (statusFilter !== 'All') {
       filtered = filtered.filter(l => l.status === statusFilter);
     }
+    if (refFilter !== 'All') {
+      filtered = filtered.filter(l => (refFilter === 'Referred') ? !!(l as any).referral_code : !(l as any).referral_code);
+    }
     
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -94,7 +115,7 @@ export default function MerchantProductLoans() {
     }
     
     return filtered;
-  }, [loans, search, statusFilter]);
+  }, [loans, search, statusFilter, refFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredLoans.length / pageSize));
   const start = (page - 1) * pageSize;
@@ -235,6 +256,15 @@ export default function MerchantProductLoans() {
             <option value="Rejected">Rejected</option>
             <option value="Loan Disbursed">Disbursed</option>
           </select>
+          <select
+            value={refFilter}
+            onChange={(e) => setRefFilter(e.target.value as any)}
+            className="px-4 py-2 border border-slate-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+          >
+            <option value="All">All Sources</option>
+            <option value="Referred">Referred</option>
+            <option value="Direct">Direct</option>
+          </select>
         </div>
         <button
           onClick={handleExportCSV}
@@ -265,11 +295,13 @@ export default function MerchantProductLoans() {
                   </th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Loan ID</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Product</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Source</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Applicant</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Loan Amount</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Tenure</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Processing Fee</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Status</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Documents</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Applied At</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Actions</th>
                 </tr>
@@ -319,6 +351,16 @@ export default function MerchantProductLoans() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
+                      {(loan as any).referral_code ? (
+                        <span className="inline-flex items-center gap-2 px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-200 text-xs font-medium" title={(loan as any).referral_code}>
+                          Referred
+                          <span className="font-mono">{String((loan as any).referral_code).slice(0,8)}…</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs">Direct</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
                       <div>
                         <button
                           onClick={() => setSelectedLoan(loan)}
@@ -329,11 +371,11 @@ export default function MerchantProductLoans() {
                         <div className="mt-1 text-xs text-slate-500 dark:text-gray-400 space-y-1">
                           <div className="flex items-center gap-1">
                             <span>{maskEmail(loan.email_id)}</span>
-                            <Lock size={10} className="text-amber-500" title="Masked for privacy" />
+                            <Lock size={10} className="text-amber-500" />
                           </div>
                           <div className="flex items-center gap-1">
                             <span>{maskMobile(loan.mobile_primary)}</span>
-                            <Lock size={10} className="text-amber-500" title="Masked for privacy" />
+                            <Lock size={10} className="text-amber-500" />
                           </div>
                         </div>
                       </div>
@@ -358,6 +400,22 @@ export default function MerchantProductLoans() {
                       >
                         {loan.status}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      {docsSet.has(loan.id) ? (
+                        <button
+                          onClick={() => setShowDocsFor(loan)}
+                          className="inline-flex items-center space-x-2 px-3 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 text-xs"
+                        >
+                          <span>View Docs</span>
+                        </button>
+                      ) : loan.status === 'Accepted' ? (
+                        <span className="inline-flex px-2 py-1 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400 text-xs">Pending</span>
+                      ) : loan.status === 'Rejected' ? (
+                        <span className="inline-flex px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs">N/A</span>
+                      ) : (
+                        <span className="inline-flex px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs">N/A</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-slate-700 dark:text-gray-300">
@@ -414,6 +472,15 @@ export default function MerchantProductLoans() {
           onClose={() => setSelectedLoan(null)}
         />
       )}
+
+      {showDocsFor && (
+        <DocsModal
+          loanId={showDocsFor.id}
+          fullName={`${showDocsFor.first_name} ${showDocsFor.last_name}`}
+          onClose={() => setShowDocsFor(null)}
+          loanType="product"
+        />
+      )}
     </div>
   );
 }
@@ -451,11 +518,11 @@ function ProductLoanDetailsModal({ loan, onClose }: { loan: ProductLoan; onClose
                 <p><span className="text-slate-600 dark:text-gray-400">Name:</span> <span className="font-medium">{loan.first_name} {loan.last_name}</span></p>
                 <p><span className="text-slate-600 dark:text-gray-400">Email:</span> <span className="font-medium flex items-center gap-1">
                   {maskEmail(loan.email_id)}
-                  <Lock size={12} className="text-amber-500" title="Masked for privacy" />
+                  <Lock size={12} className="text-amber-500" />
                 </span></p>
                 <p><span className="text-slate-600 dark:text-gray-400">Mobile:</span> <span className="font-medium flex items-center gap-1">
                   {maskMobile(loan.mobile_primary)}
-                  <Lock size={12} className="text-amber-500" title="Masked for privacy" />
+                  <Lock size={12} className="text-amber-500" />
                 </span></p>
                 <p><span className="text-slate-600 dark:text-gray-400">Address:</span> <span className="font-medium">{loan.address}</span></p>
               </div>
@@ -467,6 +534,9 @@ function ProductLoanDetailsModal({ loan, onClose }: { loan: ProductLoan; onClose
                 <p><span className="text-slate-600 dark:text-gray-400">Tenure:</span> <span className="font-medium">{loan.tenure} months</span></p>
                 <p><span className="text-slate-600 dark:text-gray-400">Processing Fee:</span> <span className="font-medium">₹{loan.processing_fee.toLocaleString('en-IN')}</span></p>
                 <p><span className="text-slate-600 dark:text-gray-400">Status:</span> <span className="font-medium">{loan.status}</span></p>
+                {(loan as any).referral_code && (
+                  <p><span className="text-slate-600 dark:text-gray-400">Referral Code:</span> <span className="font-medium">{(loan as any).referral_code}</span></p>
+                )}
               </div>
             </div>
             <div>
