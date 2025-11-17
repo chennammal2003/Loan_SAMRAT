@@ -302,6 +302,19 @@ export default function LoanDetailsStep({ formData, setFormData, errors, setErro
 
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Down Payment Amount
+        </label>
+        <input
+          type="number"
+          value={formData.downPaymentAmount}
+          onChange={(e) => setFormData((prev) => ({ ...prev, downPaymentAmount: e.target.value }))}
+          placeholder="₹"
+          className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Loan Amount (auto from selected products) <span className="text-red-500">*</span>
         </label>
         <input
@@ -339,7 +352,10 @@ export default function LoanDetailsStep({ formData, setFormData, errors, setErro
           {formData.loanAmount && formData.tenure ? (
             <div className="space-y-2">
               {(() => {
-                const loanAmount = parseFloat(formData.loanAmount);
+                const totalAmount = (formData.selectedProducts || []).reduce((sum, p) => sum + (p.price || 0), 0);
+                const downPayment = formData.downPaymentAmount ? parseFloat(formData.downPaymentAmount) : 0;
+                const safeDownPayment = Number.isFinite(downPayment) && downPayment > 0 ? downPayment : 0;
+                const principal = Math.max(totalAmount - safeDownPayment, 0);
                 const tenure = parseInt(formData.tenure);
 
                 // EMI calculation using standard formula: EMI = P * r * (1+r)^n / ((1+r)^n - 1)
@@ -352,12 +368,16 @@ export default function LoanDetailsStep({ formData, setFormData, errors, setErro
                   return Math.round(numerator / denominator);
                 };
 
-                const emiAmount = calculateEMI(loanAmount, tenure);
+                const emiAmount = calculateEMI(principal, tenure);
+                const totalPayable = emiAmount * tenure;
+                const interestAmount = Math.max(totalPayable - principal, 0);
 
                 return (
                   <div className="text-sm text-gray-600 dark:text-gray-400">
-                    <p><strong>{tenure} Months:</strong> ₹{emiAmount.toLocaleString('en-IN')} / month</p>
-                    <p className="text-xs mt-1">Total Payable: ₹{(emiAmount * tenure).toLocaleString('en-IN')}</p>
+                    <p><strong>Principal (after down payment):</strong> ₹{principal.toLocaleString('en-IN')}</p>
+                    <p><strong>{tenure} Months EMI:</strong> ₹{emiAmount.toLocaleString('en-IN')} / month</p>
+                    <p className="text-xs mt-1">Total Payable: ₹{totalPayable.toLocaleString('en-IN')}</p>
+                    <p className="text-xs">Total Interest: ₹{interestAmount.toLocaleString('en-IN')}</p>
                   </div>
                 );
               })()}

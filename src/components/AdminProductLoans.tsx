@@ -52,6 +52,7 @@ export default function AdminProductLoans() {
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const [showDocsFor, setShowDocsFor] = useState<ProductLoanRow | null>(null);
+  const [productInfoLoan, setProductInfoLoan] = useState<ProductLoanRow | null>(null);
 
   useEffect(() => {
     fetchLoans();
@@ -415,27 +416,42 @@ export default function AdminProductLoans() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <img
-                          src={loan.product_image_url || loan.product?.image_url || '/placeholder-product.png'}
-                          alt={loan.product_name}
-                          className="w-10 h-10 rounded object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = '/placeholder-product.png';
-                          }}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-slate-900 dark:text-white truncate" title={loan.product_name}>
-                            {loan.product_name}
-                          </p>
-                          {loan.product?.sku && (
-                            <p className="text-xs text-slate-500 dark:text-gray-400">SKU: {loan.product.sku}</p>
-                          )}
-                          {loan.product_price && (
-                            <p className="text-xs text-slate-500 dark:text-gray-400">
-                              Price: ₹{loan.product_price.toLocaleString('en-IN')}
-                            </p>
-                          )}
-                        </div>
+                        {(() => {
+                          const displayName = (loan.product_name && loan.product_name !== 'Product')
+                            ? loan.product_name
+                            : (loan.product?.name || loan.product_name || 'Product');
+                          const imgSrc = loan.product_image_url || loan.product?.image_url || '/placeholder-product.png';
+                          return (
+                            <>
+                              <img
+                                src={imgSrc}
+                                alt={displayName}
+                                className="w-10 h-10 rounded object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = '/placeholder-product.png';
+                                }}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setProductInfoLoan(loan)}
+                                  className="font-medium text-blue-600 dark:text-blue-400 hover:underline truncate text-left"
+                                  title="View product information"
+                                >
+                                  {displayName}
+                                </button>
+                                {loan.product?.sku && (
+                                  <p className="text-xs text-slate-500 dark:text-gray-400">SKU: {loan.product.sku}</p>
+                                )}
+                                {loan.product_price && (
+                                  <p className="text-xs text-slate-500 dark:text-gray-400">
+                                    Price: ₹{loan.product_price.toLocaleString('en-IN')}
+                                  </p>
+                                )}
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -602,6 +618,13 @@ export default function AdminProductLoans() {
         />
       )}
 
+      {productInfoLoan && (
+        <ProductInfoModal
+          loan={productInfoLoan}
+          onClose={() => setProductInfoLoan(null)}
+        />
+      )}
+
       {statusChangeLoan && (
         <ProductLoanStatusModal
           loan={statusChangeLoan}
@@ -619,6 +642,61 @@ export default function AdminProductLoans() {
           onlyAdditional={true}
         />
       )}
+    </div>
+  );
+}
+
+function ProductInfoModal({ loan, onClose }: { loan: ProductLoanRow; onClose: () => void }) {
+  const displayName = (loan.product_name && loan.product_name !== 'Product')
+    ? loan.product_name
+    : (loan.product?.name || loan.product_name || 'Product');
+  const imgSrc = loan.product_image_url || loan.product?.image_url || '/placeholder-product.png';
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center p-6 border-b border-slate-200 dark:border-gray-700">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Product Information</h2>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="p-6 space-y-4 text-sm text-slate-800 dark:text-gray-100">
+          <div className="flex items-center gap-4">
+            <img
+              src={imgSrc}
+              alt={displayName}
+              className="w-20 h-20 rounded object-cover border border-gray-200 dark:border-gray-700"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = '/placeholder-product.png';
+              }}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold truncate" title={displayName}>{displayName}</p>
+              {loan.product_price && (
+                <p className="mt-1">Price: <span className="font-medium">₹{loan.product_price.toLocaleString('en-IN')}</span></p>
+              )}
+              {loan.product?.sku && (
+                <p className="mt-1 text-xs text-slate-500 dark:text-gray-400">SKU: {loan.product.sku}</p>
+              )}
+            </div>
+          </div>
+          <div className="mt-2 text-xs text-slate-500 dark:text-gray-400">
+            <p>Application ID: {(loan as any).id}</p>
+          </div>
+        </div>
+        <div className="p-4 border-t border-slate-200 dark:border-gray-700 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
+          >
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

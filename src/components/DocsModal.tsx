@@ -17,12 +17,20 @@ export default function DocsModal({ loanId, fullName, onClose, loanType = 'gener
   useEffect(() => {
     (async () => {
       try {
-        const { data, error } = await supabase
+        let query = supabase
           .from('loan_documents')
           .select('*')
           .eq('loan_id', loanId)
-          .eq('loan_type', loanType)
           .order('uploaded_at', { ascending: true });
+
+        // For product loans, also include legacy rows where loan_type is NULL
+        if (loanType === 'product') {
+          query = query.or('loan_type.is.null,loan_type.eq.product');
+        } else {
+          query = query.eq('loan_type', loanType);
+        }
+
+        const { data, error } = await query;
         if (error) throw error;
 
         let result = data || [];

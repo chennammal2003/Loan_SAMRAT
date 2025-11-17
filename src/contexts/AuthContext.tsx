@@ -7,7 +7,7 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (username: string, email: string, password: string, role: 'merchant' | 'admin' | 'customer', mobile: string) => Promise<void>;
+  signUp: (username: string, email: string, password: string, role: 'merchant' | 'admin' | 'customer' | 'super_admin', mobile: string) => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
@@ -67,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const authUser = userRes?.user || null;
         if (authUser) {
           const usernameFromMeta = (authUser.user_metadata as any)?.username as string | undefined;
-          const roleFromMeta = (authUser.user_metadata as any)?.role as 'merchant' | 'admin' | 'customer' | undefined;
+          const roleFromMeta = (authUser.user_metadata as any)?.role as 'merchant' | 'admin' | 'customer' | 'super_admin' | undefined;
           const emailFromAuth = authUser.email ?? '';
           const mobileFromMetaRaw = (authUser.user_metadata as any)?.mobile as string | undefined;
           const mobileSanitized = (mobileFromMetaRaw || '').replace(/\D/g, '').slice(-10) || null;
@@ -122,7 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signUp = async (username: string, email: string, password: string, role: 'merchant' | 'admin' | 'customer', mobile: string) => {
+  const signUp = async (username: string, email: string, password: string, role: 'merchant' | 'admin' | 'customer' | 'super_admin', mobile: string) => {
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,

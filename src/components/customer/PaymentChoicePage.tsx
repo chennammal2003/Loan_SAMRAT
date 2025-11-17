@@ -5,6 +5,13 @@ export default function PaymentChoicePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as any)?.from ?? '/customer/checkout';
+  const price = (location.state as any)?.price;
+  const subtotal = (location.state as any)?.subtotal;
+  const merchantId = (location.state as any)?.merchantId;
+  const productId = (location.state as any)?.productId;
+  const productName = (location.state as any)?.productName;
+  const productImage = (location.state as any)?.productImage;
+  const productCategory = (location.state as any)?.productCategory;
 
   return (
     <div className="max-w-md mx-auto p-6">
@@ -23,7 +30,7 @@ export default function PaymentChoicePage() {
 
           <button
             className="w-full flex items-center justify-between px-4 py-3 rounded-lg bg-purple-600 hover:bg-purple-700 text-white"
-            onClick={() => navigate('/customer/finance-tenure')}
+            onClick={() => navigate('/customer/finance-tenure', { state: { price, subtotal, merchantId, productId, productName, productImage, productCategory } })}
           >
             <span className="flex items-center gap-3"><Landmark className="w-5 h-5"/> Finance Option</span>
             <span className="text-sm opacity-90">EMI via simple application</span>

@@ -15,6 +15,9 @@ type Row = {
   weight: number | null;
   discount_percent: number | null;
   stock_qty: number | null;
+  metal_type: string | null;
+  gemstone: string | null;
+  merchant_id?: string | null;
 };
 
 export default function ProductDetailPage() {
@@ -38,7 +41,7 @@ export default function ProductDetailPage() {
       try {
         const { data, error } = await supabase
           .from('products')
-          .select('id,name,description,price,image_url,category,purity,weight,discount_percent,stock_qty')
+          .select('id,name,description,price,image_url,category,purity,weight,discount_percent,stock_qty,metal_type,gemstone,merchant_id')
           .eq('id', id)
           .single();
         if (error) throw error;
@@ -55,6 +58,7 @@ export default function ProductDetailPage() {
   const dp = row?.discount_percent ? Number(row.discount_percent) : 0;
   const discountedPrice = dp > 0 ? basePrice - (basePrice * dp / 100) : basePrice;
   const isInStock = (row?.stock_qty ?? 0) > 0;
+  const makingCharges = Math.round(basePrice * 0.12);
 
   const emi = useMemo(() => {
     const P = discountedPrice;
@@ -72,7 +76,20 @@ export default function ProductDetailPage() {
 
   const handleBuyNow = () => {
     handleAddToCart();
-    navigate('/customer/payment-choice');
+    if (!row) {
+      navigate('/customer/payment-choice');
+      return;
+    }
+    navigate('/customer/payment-choice', {
+      state: {
+        price: discountedPrice,
+        productId: row.id,
+        productName: row.name,
+        productImage: row.image_url || '',
+        productCategory: row.category,
+        merchantId: row.merchant_id || null,
+      },
+    });
   };
 
   if (loading) {
@@ -129,6 +146,11 @@ export default function ProductDetailPage() {
               <div className="p-3 rounded-lg border">Purity <div className="font-semibold">{row.purity}</div></div>
               <div className="p-3 rounded-lg border">Weight <div className="font-semibold">{row.weight ?? 0}g</div></div>
               <div className="p-3 rounded-lg border">Stock <div className={`font-semibold ${isInStock ? 'text-green-600' : 'text-red-600'}`}>{row.stock_qty ?? 0}</div></div>
+              <div className="p-3 rounded-lg border">Metal <div className="font-semibold">{row.metal_type || '—'}</div></div>
+              <div className="p-3 rounded-lg border">Gemstone <div className="font-semibold">{row.gemstone || '—'}</div></div>
+              <div className="p-3 rounded-lg border">Making Charges <div className="font-semibold">
+                ₹{makingCharges.toLocaleString('en-IN')}
+              </div></div>
             </div>
           </div>
 

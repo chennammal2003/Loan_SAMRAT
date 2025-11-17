@@ -15,6 +15,7 @@ const initialFormData: LoanFormData = {
   goldPriceLockDate: '',
   proformaInvoice: null,
   downPaymentDetails: '',
+  downPaymentAmount: '',
   loanAmount: '',
   tenure: '',
   processingFee: 0,
@@ -203,8 +204,8 @@ export default function PublicApplyLoanPage() {
       const selectedProductsPayload = (formData.selectedProducts || []).map(p => ({ id: p.id, name: p.name, price: p.price }));
       const tenureToInsert = (() => {
         const t = parseInt(String(formData.tenure), 10);
-        if (Number.isFinite(t) && t > 0) return t;
-        return 12;
+        if (Number.isFinite(t) && t >= 3) return t;
+        return 12; // safe default within allowed range
       })();
       const { error } = await supabase.rpc('submit_loan_via_share_link', {
         p_link_id: linkId,

@@ -24,6 +24,7 @@ interface MerchantProfileForm {
   account_number: string;
   ifsc_code: string;
   upi_id?: string;
+  shop_url?: string;
 }
 
 const emptyForm = (merchant_id: string, defaults?: Partial<MerchantProfileForm>): MerchantProfileForm => ({
@@ -42,6 +43,7 @@ const emptyForm = (merchant_id: string, defaults?: Partial<MerchantProfileForm>)
   account_number: '',
   ifsc_code: '',
   upi_id: '',
+  shop_url: '',
   ...(defaults || {}),
 });
 
@@ -88,6 +90,7 @@ export default function MerchantProfilePanel({ open, onClose }: MerchantProfileP
               account_number: data.account_number || '',
               ifsc_code: data.ifsc_code || '',
               upi_id: data.upi_id || '',
+              shop_url: data.shop_url || '',
             });
             setIsEditing(false);
           } else {
@@ -142,6 +145,7 @@ export default function MerchantProfilePanel({ open, onClose }: MerchantProfileP
             account_number: form.account_number,
             ifsc_code: form.ifsc_code,
             upi_id: form.upi_id || null,
+            shop_url: form.shop_url || null,
           },
           { onConflict: 'merchant_id' }
         );
@@ -214,6 +218,17 @@ export default function MerchantProfilePanel({ open, onClose }: MerchantProfileP
             <div>
               <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Phone Number</label>
               <input value={form?.phone || ''} onChange={(e)=>setForm(f=>({...(f as any), phone:e.target.value}))} readOnly={!isEditing} className={`w-full px-3 py-2 rounded border ${isEditing ? 'bg-white dark:bg-gray-700' : 'bg-gray-100 dark:bg-gray-700/70 cursor-not-allowed'}`} />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Shop URL</label>
+              <input
+                type="url"
+                value={form?.shop_url || ''}
+                onChange={(e)=>setForm(f=>({...(f as any), shop_url:e.target.value}))}
+                readOnly={!isEditing}
+                className={`w-full px-3 py-2 rounded border ${isEditing ? 'bg-white dark:bg-gray-700' : 'bg-gray-100 dark:bg-gray-700/70 cursor-not-allowed'}`}
+                placeholder="https://yourshop.example.com"
+              />
             </div>
             <div className="col-span-2">
               <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Address</label>

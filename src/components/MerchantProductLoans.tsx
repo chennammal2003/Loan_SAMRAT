@@ -40,6 +40,7 @@ export default function MerchantProductLoans() {
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const [docsSet, setDocsSet] = useState<Set<string>>(new Set());
+  const [productInfoLoan, setProductInfoLoan] = useState<ProductLoan | null>(null);
 
   useEffect(() => {
     if (profile) {
@@ -339,9 +340,14 @@ export default function MerchantProductLoans() {
                           }}
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-slate-900 dark:text-white truncate" title={loan.product_name}>
+                          <button
+                            type="button"
+                            onClick={() => setProductInfoLoan(loan)}
+                            className="font-medium text-blue-600 dark:text-blue-400 hover:underline truncate text-left"
+                            title="View product information"
+                          >
                             {loan.product_name}
-                          </p>
+                          </button>
                           {loan.product_price && (
                             <p className="text-xs text-slate-500 dark:text-gray-400">
                               Price: ₹{loan.product_price.toLocaleString('en-IN')}
@@ -473,6 +479,13 @@ export default function MerchantProductLoans() {
         />
       )}
 
+      {productInfoLoan && (
+        <ProductInfoModal
+          loan={productInfoLoan}
+          onClose={() => setProductInfoLoan(null)}
+        />
+      )}
+
       {showDocsFor && (
         <DocsModal
           loanId={showDocsFor.id}
@@ -481,6 +494,58 @@ export default function MerchantProductLoans() {
           loanType="product"
         />
       )}
+    </div>
+  );
+}
+
+function ProductInfoModal({ loan, onClose }: { loan: ProductLoan; onClose: () => void }) {
+  const imgSrc = loan.product_image_url || '/placeholder-product.png';
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center p-6 border-b border-slate-200 dark:border-gray-700">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Product Information</h2>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="p-6 space-y-4 text-sm text-slate-800 dark:text-gray-100">
+          <div className="flex items-center gap-4">
+            <img
+              src={imgSrc}
+              alt={loan.product_name}
+              className="w-20 h-20 rounded object-cover border border-gray-200 dark:border-gray-700"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = '/placeholder-product.png';
+              }}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold truncate" title={loan.product_name}>{loan.product_name}</p>
+              {loan.product_price && (
+                <p className="mt-1">Price: <span className="font-medium">₹{loan.product_price.toLocaleString('en-IN')}</span></p>
+              )}
+              {loan.product_category && (
+                <p className="mt-1 text-xs text-slate-500 dark:text-gray-400">Category: {loan.product_category}</p>
+              )}
+            </div>
+          </div>
+          <div className="mt-2 text-xs text-slate-500 dark:text-gray-400">
+            <p>Application ID: {loan.id}</p>
+          </div>
+        </div>
+        <div className="p-4 border-t border-slate-200 dark:border-gray-700 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
+          >
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

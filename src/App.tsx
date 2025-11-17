@@ -9,6 +9,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import PublicApplyLoanPage from './pages/PublicApplyLoanPage.tsx';
 import AdminDashboard from './components/AdminDashboard';
+import SuperAdminDashboard from './components/SuperAdminDashboard';
 import LoanDetails from './components/LoanDetails';
 import MerchantDisbursedLoans from './components/MerchantDisbursedLoans';
 import MerchantPaymentTracker from './components/MerchantPaymentTracker';
@@ -27,6 +28,7 @@ import CustomerHome from './components/customer/CustomerHome';
 import CustomerOrders from './components/customer/CustomerOrders';
 import CustomerProfile from './components/customer/CustomerProfile';
 import CustomerShell from './components/customer/CustomerShell';
+import CustomerProductLoans from './components/customer/CustomerProductLoans';
 import { WishlistProvider } from './contexts/WishlistContext';
 import WishlistPage from './components/customer/WishlistPage';
 import CartPage from './components/customer/CartPage';
@@ -126,6 +128,10 @@ function DashboardRouter() {
     );
   }
 
+  if (profile.role === 'super_admin') {
+    return <SuperAdminDashboard />;
+  }
+
   if (['admin','nbfc_admin'].includes(profile.role as any)) return <NbfcProfileGate><AdminDashboard /></NbfcProfileGate>;
   if (profile.role === 'merchant') return <TieUpGate><MerchantDashboard /></TieUpGate>;
   // Customer: send to customer area (index renders store)
@@ -170,6 +176,7 @@ function App() {
               <Route path="wishlist" element={<WishlistPage />} />
               <Route path="orders" element={<CustomerOrders />} />
               <Route path="profile" element={<CustomerProfile />} />
+              <Route path="loans" element={<CustomerProductLoans />} />
               <Route path="cart" element={<CartPage /> } />
               <Route path="checkout" element={<CheckoutPage /> } />
               <Route path="product/:id" element={<ProductDetailPage /> } />

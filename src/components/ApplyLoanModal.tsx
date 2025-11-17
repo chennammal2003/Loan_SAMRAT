@@ -19,6 +19,7 @@ export interface LoanFormData {
   goldPriceLockDate: string;
   proformaInvoice: File | null;
   downPaymentDetails: string;
+  downPaymentAmount: string;
   loanAmount: string;
   tenure: string;
   processingFee: number;
@@ -68,6 +69,7 @@ const initialFormData: LoanFormData = {
   goldPriceLockDate: '',
   proformaInvoice: null,
   downPaymentDetails: '',
+  downPaymentAmount: '',
   loanAmount: '',
   tenure: '',
   processingFee: 0,
@@ -370,23 +372,17 @@ export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalPro
 
         // 2) Insert loan after successful uploads
         const interestSchemeIds = (formData.selectedProducts || []).map(p => p.id).join(',');
-        const selectedProductsPayload = (formData.selectedProducts || []).map(p => ({ id: p.id, name: p.name, price: p.price }));
-        // Try to fetch referral code for this merchant
-        let referralCode: string | null = null;
-        try {
-          const { data: mp } = await supabase
-            .from('merchant_profiles')
-            .select('referral_code')
-            .eq('merchant_id', profile.id)
-            .maybeSingle();
-          referralCode = (mp as any)?.referral_code || null;
-        } catch (_) {}
-        // ensure tenure is a valid positive integer to satisfy DB check constraint
+        // ensure tenure is a valid positive integer that satisfies DB check constraint (min 3 months)
         const tenureToInsert = (() => {
           const t = parseInt(String(formData.tenure), 10);
-          if (Number.isFinite(t) && t > 0) return t;
-          return 12; // safe default
+          if (Number.isFinite(t) && t >= 3) return t;
+          return 12; // safe default within allowed range
         })();
+
+        const totalProductAmount = (formData.selectedProducts || []).reduce((sum, p) => sum + (p.price || 0), 0);
+        const downPaymentAmount = formData.downPaymentAmount ? parseFloat(formData.downPaymentAmount) : 0;
+        const safeDownPaymentAmount = Number.isFinite(downPaymentAmount) && downPaymentAmount > 0 ? downPaymentAmount : 0;
+        const downPaymentPercentage = totalProductAmount > 0 ? (safeDownPaymentAmount / totalProductAmount) * 100 : 0;
         const { data: loanData, error: loanError } = await supabase
           .from('loans')
           .insert({
@@ -430,26 +426,91 @@ export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalPro
 
         if (loanError || !loanData) throw loanError || new Error('Failed to create loan');
 
-        // 3) Insert into product_loans with referral
+        // 3) Insert corresponding row into product_loans table for product loan tracking
+        let productLoanId: string | null = null;
         try {
-          await supabase.from('product_loans').insert({
-            loan_id: loanData.id,
-            referral_code: referralCode,
-            products: selectedProductsPayload,
-            total_amount: parseFloat(formData.loanAmount),
-          });
+          const primaryProduct = (formData.selectedProducts || [])[0] || null;
+          const { data: productLoan, error: productLoanErr } = await supabase
+            .from('product_loans')
+            .insert({
+              user_id: profile.id,
+              first_name: formData.firstName,
+              last_name: formData.lastName,
+              email_id: formData.emailId,
+              mobile_primary: formData.mobilePrimary,
+              mobile_alternative: formData.mobileAlternative || null,
+              address: formData.address,
+              pin_code: formData.pinCode,
+              date_of_birth: formData.dateOfBirth,
+              father_mother_spouse_name: formData.fatherMotherSpouseName,
+              aadhaar_number: formData.aadhaarNumber,
+              pan_number: formData.panNumber,
+              gender: formData.gender || 'Male',
+              marital_status: formData.maritalStatus || 'Single',
+              occupation: formData.occupation === 'Others' ? formData.occupationOther : formData.occupation,
+              monthly_income: null,
+              employment_type: null,
+              loan_purpose: null,
+              loan_amount: parseFloat(formData.loanAmount),
+              tenure: tenureToInsert,
+              processing_fee: formData.processingFee,
+              status: 'Pending',
+              declaration_accepted: formData.declarationAccepted,
+              interest_scheme: formData.interestScheme || 'Standard',
+              gold_price_lock_date: formData.goldPriceLockDate,
+              reference1_name: formData.reference1Name || 'Not provided',
+              reference1_address: formData.reference1Address || 'Not provided',
+              reference1_contact: formData.reference1Contact || '0000000000',
+              reference1_relationship: formData.reference1Relationship || 'Friend',
+              reference2_name: formData.reference2Name || 'Not provided',
+              reference2_address: formData.reference2Address || 'Not provided',
+              reference2_contact: formData.reference2Contact || '0000000000',
+              reference2_relationship: formData.reference2Relationship || 'Friend',
+              bank_name: null,
+              account_number: null,
+              ifsc_code: null,
+              product_id: primaryProduct ? primaryProduct.id : null,
+              product_name: primaryProduct ? primaryProduct.name : 'Product Loan',
+              product_image_url: '',
+              product_price: primaryProduct ? primaryProduct.price : parseFloat(formData.loanAmount),
+              product_category: null,
+              merchant_id: profile.id,
+              introduced_by: formData.introducedBy || null,
+              downpayment_percentage: downPaymentPercentage,
+              downpayment_amount: safeDownPaymentAmount,
+            })
+            .select()
+            .single();
+
+          if (productLoanErr || !productLoan) throw productLoanErr || new Error('Failed to create product loan');
+          productLoanId = productLoan.id as string;
         } catch (_) {
           // ignore if table/columns not present; main loan row already created
         }
 
         // 3) Insert loan_documents mapping
         if (uploadedFiles.length > 0) {
+          const mapDocType = (label: string): string => {
+            const normalized = label.toLowerCase();
+            if (normalized.includes('aadhaar')) return 'aadhaar';
+            if (normalized.includes('pan')) return 'pan';
+            if (normalized.includes('bank')) return 'bank_statement';
+            if (normalized.includes('utility')) return 'utility_bill';
+            if (normalized.includes('passport')) return 'passport_photo';
+            if (normalized.includes('salary')) return 'salary_slip';
+            if (normalized.includes('income')) return 'income_proof';
+            if (normalized.includes('appraisal')) return 'appraisal_slip';
+            if (normalized.includes('address')) return 'address_proof';
+            return 'other';
+          };
+
           const docsPayload = uploadedFiles.map((u) => ({
-            loan_id: loanData.id,
-            document_type: u.type,
+            loan_id: productLoanId || loanData.id,
+            document_type: mapDocType(u.type),
             file_name: u.file.name,
             file_path: u.path,
             file_size: u.file.size,
+            loan_type: 'product',
           }));
           const { error: docsError } = await supabase.from('loan_documents').insert(docsPayload);
           if (docsError) throw docsError;

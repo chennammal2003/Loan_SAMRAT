@@ -41,6 +41,7 @@ export default function CustomerShell() {
               { label: 'Store', path: '/customer' },
               { label: 'Wishlist', path: '/customer/wishlist' },
               { label: 'My Orders', path: '/customer/orders' },
+              { label: 'My Loans', path: '/customer/loans' },
               { label: 'Profile', path: '/customer/profile' },
             ].map(({ label, path }) => {
               const active = location.pathname === path || (path === '/customer' && location.pathname === '/customer/store');

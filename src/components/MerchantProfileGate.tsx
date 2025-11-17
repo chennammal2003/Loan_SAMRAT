@@ -32,6 +32,7 @@ interface FormState {
   account_number: string;
   ifsc_code: string;
   upi_id?: string;
+  shop_url?: string;
 }
 
 const empty: FormState = {
@@ -49,6 +50,7 @@ const empty: FormState = {
   account_number: '',
   ifsc_code: '',
   upi_id: '',
+  shop_url: '',
 };
 
 const genCode = (biz: string, location: string, seed: string) => {
@@ -157,6 +159,7 @@ export default function MerchantProfileGate({ onDone }: Props) {
             account_number: form.account_number,
             ifsc_code: form.ifsc_code,
             upi_id: form.upi_id || null,
+            shop_url: form.shop_url || null,
             updated_at: new Date().toISOString(),
           })
           .eq('merchant_id', profile.id);
@@ -181,6 +184,7 @@ export default function MerchantProfileGate({ onDone }: Props) {
             account_number: form.account_number,
             ifsc_code: form.ifsc_code,
             upi_id: form.upi_id || null,
+            shop_url: form.shop_url || null,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           });
@@ -234,6 +238,7 @@ export default function MerchantProfileGate({ onDone }: Props) {
           <Field label="Owner Name" value={form.owner_name} onChange={(v)=>setForm({...form,owner_name:v})} error={currentErrors.owner_name} />
           <Field type="email" label="Email Address" value={form.email} onChange={(v)=>setForm({...form,email:v})} error={currentErrors.email} />
           <Field label="Phone Number" value={form.phone} onChange={(v)=>setForm({...form,phone:v})} error={currentErrors.phone} />
+          <Field label="Shop URL (optional)" value={form.shop_url||''} onChange={(v)=>setForm({...form,shop_url:v})} />
           <div className="md:col-span-2">
             <div className="flex items-center justify-between mb-1">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Address</label>
