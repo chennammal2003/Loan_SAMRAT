@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { LogOut, Moon, Sun, Users, Shield, FileText, CheckCircle, AlertTriangle, HandCoins } from 'lucide-react';
+import { LogOut, Moon, Sun, Users, Shield, FileText, CheckCircle, AlertTriangle, HandCoins, Bell } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useNavigate } from 'react-router-dom';
@@ -8,9 +8,10 @@ import { StatCard } from './StatCard';
 import { FilterBar } from './FilterBar';
 import { UserTable } from './UserTable';
 import { UserDetailsModal } from './UserDetailsModal';
+import NotificationsPanel from './NotificationsPanel';
 import type { UserType, UserProfile } from '../types';
 
-type SuperAdminTab = 'users' | 'loans';
+type SuperAdminTab = 'users' | 'loans' | 'notifications';
 
 interface DashboardStats {
   all: number;
@@ -135,6 +136,20 @@ export default function SuperAdminDashboard() {
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [selectedDetails, setSelectedDetails] = useState<MerchantProfile | NBFCProfile | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+
+  const pendingApprovals = useMemo(() => {
+    const pendingMerchants = users.filter(
+      (u) => u.role === 'merchant' && u.is_active === false
+    ).length;
+    const pendingNbfc = users.filter(
+      (u) => (u.role === 'nbfc_admin' || u.role === 'admin') && u.is_active === false
+    ).length;
+    return {
+      merchants: pendingMerchants,
+      nbfc: pendingNbfc,
+      total: pendingMerchants + pendingNbfc,
+    };
+  }, [users]);
 
   useEffect(() => {
     fetchUsers();
@@ -323,7 +338,7 @@ export default function SuperAdminDashboard() {
       ) {
         const { data: loan } = await supabase
           .from('loans')
-          .select('date_of_birth, mobile_primary, phone, address, applicant_address')
+          .select('date_of_birth, mobile_primary, phone, address, applicant_address, email, email_id')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -344,15 +359,25 @@ export default function SuperAdminDashboard() {
               (enrichedUser as any).address ||
               (loan as any).applicant_address ||
               (loan as any).address,
+            // if somehow email is missing in user_profiles, try to hydrate from loans
+            email:
+              (enrichedUser as any).email ||
+              (loan as any).email ||
+              (loan as any).email_id,
           } as any;
         }
       }
 
       // 3) If still missing mobile, try product_loans
-      if (!(enrichedUser as any).mobile || !(enrichedUser as any).phone || !(enrichedUser as any).address) {
+      if (
+        !(enrichedUser as any).mobile ||
+        !(enrichedUser as any).phone ||
+        !(enrichedUser as any).address ||
+        !(enrichedUser as any).date_of_birth
+      ) {
         const { data: prodLoan } = await supabase
           .from('product_loans')
-          .select('mobile_primary, address, date_of_birth')
+          .select('mobile_primary, address, date_of_birth, email_id')
           .eq('user_id', user.id as any)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -369,6 +394,9 @@ export default function SuperAdminDashboard() {
             date_of_birth:
               (enrichedUser as any).date_of_birth ||
               (prodLoan as any).date_of_birth,
+            email:
+              (enrichedUser as any).email ||
+              (prodLoan as any).email_id,
           } as any;
         }
       }
@@ -464,6 +492,24 @@ export default function SuperAdminDashboard() {
               <FileText className="w-5 h-5" />
               <span>Loan Details</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('notifications')}
+              className={`w-full px-4 py-3 rounded-lg flex items-center space-x-3 text-sm font-medium transition-colors ${
+                activeTab === 'notifications'
+                  ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white'
+                  : 'bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600'
+              }`}
+            >
+              <Bell className="w-5 h-5" />
+              <span>Profile Notifications</span>
+              {pendingApprovals.total > 0 && (
+                <span className="inline-flex items-center justify-center rounded-full bg-red-600 text-white text-xs font-bold min-w-[1.25rem] px-1 py-0.5 ml-auto">
+                  {pendingApprovals.total}
+                </span>
+              )}
+            </button>
           </div>
         </nav>
 
@@ -488,12 +534,30 @@ export default function SuperAdminDashboard() {
         <header className="bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-20">
           <div className="px-8 py-4 flex justify-between items-center">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Super Admin Dashboard</h1>
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-            >
-              {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5 text-yellow-400" />}
-            </button>
+            <div className="flex items-center gap-4">
+              {pendingApprovals.total > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('users');
+                    setSelectedType('all');
+                  }}
+                  className="relative inline-flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 border border-red-200 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-300 dark:border-red-700"
+                >
+                  <Bell className="w-5 h-5" />
+                  <span>Pending Approvals</span>
+                  <span className="inline-flex items-center justify-center rounded-full bg-red-600 text-white text-xs font-bold min-w-[1.5rem] px-1 py-0.5">
+                    {pendingApprovals.total}
+                  </span>
+                </button>
+              )}
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5 text-yellow-400" />}
+              </button>
+            </div>
           </div>
         </header>
 
@@ -762,6 +826,32 @@ export default function SuperAdminDashboard() {
               )}
               </div>
             </>
+          )}
+
+          {activeTab === 'notifications' && (
+            <NotificationsPanel
+              onApproveUser={async (userId: string, userType: 'merchant' | 'nbfc') => {
+                try {
+                  const { error } = await supabase
+                    .from('user_profiles')
+                    .update({ is_active: true, updated_at: new Date().toISOString() })
+                    .eq('id', userId);
+                  
+                  if (error) throw error;
+                  
+                  // Refresh users list
+                  fetchUsers();
+                } catch (error) {
+                  console.error('Error approving user:', error);
+                }
+              }}
+              onViewUserDetails={(userId: string) => {
+                const user = users.find(u => u.id === userId);
+                if (user) {
+                  handleViewDetails(user);
+                }
+              }}
+            />
           )}
         </div>
       </main>

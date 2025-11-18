@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import PendingVerificationPage from './PendingVerificationPage';
 
 // Gate for merchants: require an approved tie-up to access NBFC-dependent features
 export default function TieUpGate({ children }: { children: React.ReactNode }) {
@@ -14,11 +15,33 @@ export default function TieUpGate({ children }: { children: React.ReactNode }) {
   const [reason, setReason] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [adminContact, setAdminContact] = useState<{ name?: string|null; email?: string|null; phone?: string|null } | null>(null);
+  const [hasMerchantProfile, setHasMerchantProfile] = useState<boolean | null>(null);
+  const [merchantProfileData, setMerchantProfileData] = useState<any>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       if (!profile || profile.role !== 'merchant') { setChecking(false); return; }
+      // If merchant is not yet approved by Super Admin, first check if their merchant profile exists.
+      // New merchants must be able to complete their profile before we show the pending page.
+      if (profile.is_active === false) {
+        const { data: mp, error: mpErr } = await supabase
+          .from('merchant_profiles')
+          .select('*')
+          .eq('merchant_id', profile.id)
+          .maybeSingle();
+        if (cancelled) return;
+        if (!mpErr && mp) {
+          setHasMerchantProfile(true);
+          setMerchantProfileData(mp);
+        } else {
+          setHasMerchantProfile(false);
+          setMerchantProfileData(null);
+        }
+        setState('none');
+        setChecking(false);
+        return;
+      }
       try {
         // If final tie-up exists with valid admin and nbfc, allow
         const { data: tie, error: tieErr } = await supabase
@@ -31,6 +54,8 @@ export default function TieUpGate({ children }: { children: React.ReactNode }) {
           setChecking(false);
           return;
         }
+        // Merchant is active; mark that a profile effectively exists for gating purposes
+        setHasMerchantProfile(true);
         // Else check requests
         const { data: req, error: reqErr } = await supabase
           .from('nbfc_tieup_requests')
@@ -60,7 +85,13 @@ export default function TieUpGate({ children }: { children: React.ReactNode }) {
 
   // Strict gate: if merchant has no tie-up and no request, force NBFC selection
   useEffect(() => {
-    if (!checking && profile?.role === 'merchant' && state === 'none' && location.pathname !== '/nbfc/select') {
+    if (
+      !checking &&
+      profile?.role === 'merchant' &&
+      profile.is_active !== false &&
+      state === 'none' &&
+      location.pathname !== '/nbfc/select'
+    ) {
       navigate('/nbfc/select', { replace: true });
     }
   }, [checking, state, profile?.role, location.pathname, navigate]);
@@ -91,8 +122,31 @@ export default function TieUpGate({ children }: { children: React.ReactNode }) {
   }
 
   if (profile?.role === 'merchant') {
+    // If merchant is inactive but their merchant profile does NOT yet exist,
+    // allow them into the dashboard so they can complete profile.
+    if (profile.is_active === false && hasMerchantProfile === false) {
+      return <>{children}</>;
+    }
+
+    // Once the merchant profile exists and the account is still inactive,
+    // show the pending verification page instead of the full app.
+    if (profile.is_active === false && hasMerchantProfile === true) {
+      return (
+        <PendingVerificationPage
+          userType="merchant"
+          profileData={{
+            business_name: merchantProfileData?.business_name,
+            owner_name: merchantProfileData?.owner_name,
+            email: merchantProfileData?.email || profile.email,
+            phone: merchantProfileData?.phone
+          }}
+        />
+      );
+    }
+
     if (state === 'approved') return <>{children}</>;
-    if (location.pathname === '/nbfc/select') return <>{children}</>;
+    // Only allow access to NBFC selection if merchant is active and approved
+    if (location.pathname === '/nbfc/select' && profile.is_active === true) return <>{children}</>;
 
     // Blocked states UI
     return (

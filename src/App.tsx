@@ -84,6 +84,8 @@ function MerchantRoute({ children }: { children: React.ReactNode }) {
   if (!user) return <Navigate to="/signin" replace />;
   if (!profile) return null;
   if (profile.role !== 'merchant') return <Navigate to="/dashboard" replace />;
+  // Redirect inactive merchants to dashboard where TieUpGate will show pending page
+  if (profile.is_active === false) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
@@ -99,6 +101,8 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   if (!user) return <Navigate to="/signin" replace />;
   if (!profile) return null;
   if (!['admin','nbfc_admin'].includes(profile.role as any)) return <Navigate to="/dashboard" replace />;
+  // Redirect inactive admins to dashboard where NbfcProfileGate will show pending page
+  if (profile.is_active === false) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 

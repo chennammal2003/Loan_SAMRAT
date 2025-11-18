@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import PendingVerificationPage from './PendingVerificationPage';
 
 export default function NbfcProfileGate({ children }: { children: React.ReactNode }) {
   const { user, profile } = useAuth();
@@ -9,6 +10,7 @@ export default function NbfcProfileGate({ children }: { children: React.ReactNod
   const location = useLocation();
   const [checking, setChecking] = useState(true);
   const [hasProfile, setHasProfile] = useState<boolean | null>(null);
+  const [nbfcProfileData, setNbfcProfileData] = useState<any>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -27,7 +29,7 @@ export default function NbfcProfileGate({ children }: { children: React.ReactNod
 
       const { data, error } = await supabase
         .from('nbfc_profiles')
-        .select('nbfc_id')
+        .select('*')
         .eq('nbfc_id', profile.id)
         .maybeSingle();
 
@@ -37,12 +39,14 @@ export default function NbfcProfileGate({ children }: { children: React.ReactNod
         // If table not accessible, allow navigation but log
         console.error('nbfc_profiles check error', error);
         setHasProfile(true);
+        setNbfcProfileData(null);
         setChecking(false);
         return;
       }
 
       const exists = !!data;
       setHasProfile(exists);
+      setNbfcProfileData(data);
       setChecking(false);
 
       // If missing and not already on setup, redirect
@@ -64,8 +68,25 @@ export default function NbfcProfileGate({ children }: { children: React.ReactNod
     );
   }
 
-  if (profile?.role === 'admin' && hasProfile === false) {
-    return null; // Redirected to setup
+  if (profile?.role === 'admin') {
+    // If admin doesn't have a profile yet, redirect to setup (already handled above)
+    if (hasProfile === false) {
+      return null; // Redirected to setup
+    }
+    
+    // If admin has profile but is not approved by Super Admin, show pending page
+    if (hasProfile === true && profile.is_active === false) {
+      return (
+        <PendingVerificationPage
+          userType="nbfc_admin"
+          profileData={{
+            nbfc_name: nbfcProfileData?.name,
+            email: profile.email,
+            phone: nbfcProfileData?.contact_number
+          }}
+        />
+      );
+    }
   }
 
   return <>{children}</>;

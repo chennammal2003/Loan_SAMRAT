@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { createProfileSubmissionNotification } from '../lib/notifications';
 
 interface MerchantProfilePanelProps {
   open: boolean;
@@ -125,6 +126,15 @@ export default function MerchantProfilePanel({ open, onClose }: MerchantProfileP
     }
     setSaving(true);
     try {
+      // Check if this is a new profile submission (first time save)
+      const { data: existingProfile } = await supabase
+        .from('merchant_profiles')
+        .select('merchant_id')
+        .eq('merchant_id', form.merchant_id)
+        .maybeSingle();
+      
+      const isNewProfile = !existingProfile;
+      
       // Attempt upsert into merchant_profiles (requires table with unique constraint on merchant_id)
       const { error } = await supabase
         .from('merchant_profiles')
@@ -150,10 +160,51 @@ export default function MerchantProfilePanel({ open, onClose }: MerchantProfileP
           { onConflict: 'merchant_id' }
         );
       if (error) throw error;
-      setToast({ type: 'success', message: 'Profile saved' });
-      setTimeout(() => setToast(null), 3000);
-      // Switch back to view mode after save, keep panel open
-      setIsEditing(false);
+      
+      // Create notification for Super Admin if this is a new profile
+      if (isNewProfile) {
+        await createProfileSubmissionNotification({
+          type: 'merchant_profile_submitted',
+          userId: form.merchant_id,
+          userName: form.owner_name || profile.username || 'Unknown',
+          userEmail: form.email || profile.email || 'Unknown',
+          profileData: {
+            business_name: form.business_name,
+            business_type: form.business_type,
+            business_category: form.business_category,
+            phone: phone
+          }
+        });
+
+        // CRITICAL: Ensure user is set to inactive after profile submission
+        // This is a failsafe in case the signup process didn't set it correctly
+        const { error: inactiveError } = await supabase
+          .from('user_profiles')
+          .update({ 
+            is_active: false,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', form.merchant_id);
+
+        if (inactiveError) {
+          console.error('Error setting merchant to inactive after profile submission:', inactiveError);
+        }
+      }
+      
+      setToast({ type: 'success', message: 'Profile saved successfully! Redirecting...' });
+      
+      // If this is a new profile, close the panel and let the parent component handle the redirect
+      if (isNewProfile) {
+        setTimeout(() => {
+          onClose();
+          // The parent component (TieUpGate) will detect the new profile and show pending page
+          window.location.reload();
+        }, 1500);
+      } else {
+        setTimeout(() => setToast(null), 3000);
+        // Switch back to view mode after save, keep panel open
+        setIsEditing(false);
+      }
     } catch (e: any) {
       console.error('Failed to save merchant profile', e);
       setToast({ type: 'error', message: e?.message || 'Failed to save profile. Ask admin to enable merchant_profiles table.' });

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Eye, FileText } from 'lucide-react';
 import { supabase, LoanApplication } from '../lib/supabase';
 import LoanDetailsModal from './LoanDetailsModal';
-
+ 
 export default function AcceptedLoans() {
   const [loans, setLoans] = useState<LoanApplication[]>([]);
   const [loading, setLoading] = useState(true);

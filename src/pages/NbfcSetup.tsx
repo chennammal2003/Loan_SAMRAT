@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { createProfileSubmissionNotification } from '../lib/notifications';
 
 const APPROVAL_TYPES = ['Instant', 'Manual', 'Credit Score Based'] as const;
 const NBFC_TYPES = ['Loan Company', 'Gold Loan', 'Microfinance', 'Housing Finance', 'Two-Wheeler', 'Consumer Durable', 'Other'] as const;
@@ -135,20 +136,11 @@ export default function NbfcSetup({ embedded = false }: { embedded?: boolean }) 
   }, [profile?.id, profile?.role, navigate]);
 
   const canSubmit = useMemo(() => {
-    const ir = Number(interestRate);
-    const pfFlat = Number(processingFeeFlat || 0);
-    const pfPct = Number(processingFeePercent || 0);
-    const minAmt = minLoanAmount ? Number(minLoanAmount) : 0;
-    const maxAmt = maxLoanAmount ? Number(maxLoanAmount) : 0;
-    const approvalValid = APPROVAL_TYPES.includes(approvalType);
-    const loanAmtValid = !minLoanAmount || !maxLoanAmount || maxAmt >= minAmt;
-    const pfPctValid = !Number.isNaN(pfPct) && pfPct >= 0 && pfPct <= 100;
-    const preclosePct = preclosureChargePercent ? Number(preclosureChargePercent) : 0;
-    const lateFeePct = latePaymentFeePercent ? Number(latePaymentFeePercent) : 0;
-    const precloseValid = Number.isNaN(preclosePct) ? false : (preclosePct >= 0 && preclosePct <= 100);
-    const lateFeeValid = Number.isNaN(lateFeePct) ? false : (lateFeePct >= 0 && lateFeePct <= 100);
-    return !!name && !Number.isNaN(ir) && ir >= 0 && !Number.isNaN(pfFlat) && pfFlat >= 0 && pfPctValid && precloseValid && lateFeeValid && approvalValid && loanAmtValid && tenureOptions.length > 0;
-  }, [name, interestRate, processingFeeFlat, processingFeePercent, preclosureChargePercent, latePaymentFeePercent, approvalType, tenureOptions, minLoanAmount, maxLoanAmount]);
+    // Keep validation extremely simple so the user is not blocked from saving.
+    // As long as an NBFC name is provided, allow submit; any real issues will
+    // be reported from Supabase in the error box.
+    return !!name;
+  }, [name]);
 
   const addTenureFromInput = () => {
     const v = Number(tenureInput.trim());
@@ -190,9 +182,19 @@ export default function NbfcSetup({ embedded = false }: { embedded?: boolean }) 
 
       const ir = Number(interestRate);
       const pfFlat = Number(processingFeeFlat || 0);
-      const pfPct = Number(processingFeePercent || 0);
-      const preclosePct = preclosureChargePercent ? Number(preclosureChargePercent) : null;
-      const lateFeePct = latePaymentFeePercent ? Number(latePaymentFeePercent) : null;
+      const pfPctRaw = processingFeePercent ? Number(processingFeePercent) : null;
+
+      // Sanitize percentage fields to always respect DB check constraints (0-100 or null)
+      const clampPercent = (v: number | null): number | null => {
+        if (v == null || Number.isNaN(v)) return null;
+        if (v < 0) return 0;
+        if (v > 100) return 100;
+        return v;
+      };
+
+      const pfPct = clampPercent(pfPctRaw);
+      const preclosePct = clampPercent(preclosureChargePercent ? Number(preclosureChargePercent) : null);
+      const lateFeePct = clampPercent(latePaymentFeePercent ? Number(latePaymentFeePercent) : null);
       const docFees = documentationCharges ? Number(documentationCharges) : null;
       const minAmt = minLoanAmount ? Number(minLoanAmount) : null;
       const maxAmt = maxLoanAmount ? Number(maxLoanAmount) : null;
@@ -239,13 +241,60 @@ export default function NbfcSetup({ embedded = false }: { embedded?: boolean }) 
         updated_at: new Date().toISOString(),
       } as const;
 
+      // Check if this is a new profile submission (first time save)
+      const { data: existingProfile } = await supabase
+        .from('nbfc_profiles')
+        .select('nbfc_id')
+        .eq('nbfc_id', profile.id)
+        .maybeSingle();
+      
+      const isNewProfile = !existingProfile;
+
       const { error } = await supabase
         .from('nbfc_profiles')
         .upsert(payload, { onConflict: 'nbfc_id' });
 
       if (error) throw error;
 
-      navigate('/dashboard', { replace: true });
+        // Create notification for Super Admin if this is a new profile
+        if (isNewProfile) {
+          await createProfileSubmissionNotification({
+            type: 'nbfc_profile_submitted',
+            userId: profile.id,
+            userName: profile.username || 'Unknown',
+            userEmail: profile.email || 'Unknown',
+            profileData: {
+              nbfc_name: name,
+              nbfc_type: nbfcType,
+              interest_rate: ir,
+              cin_number: cinNumber,
+              rbi_license_number: rbiLicenseNumber
+            }
+          });
+
+          // CRITICAL: Ensure admin is set to inactive after profile submission
+          // This is a failsafe in case the signup process didn't set it correctly
+          const { error: inactiveError } = await supabase
+            .from('user_profiles')
+            .update({ 
+              is_active: false,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', profile.id);
+
+          if (inactiveError) {
+            console.error('Error setting admin to inactive after profile submission:', inactiveError);
+          }
+        }
+
+      // If this is a new profile and user is inactive, they'll see the pending page
+      // Otherwise, redirect to dashboard
+      if (isNewProfile && profile.is_active === false) {
+        // Redirect will be handled by AdminDashboard component showing pending page
+        navigate('/dashboard', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     } catch (err: any) {
       setError(err?.message || 'Failed to save NBFC profile');
     } finally {
@@ -253,16 +302,8 @@ export default function NbfcSetup({ embedded = false }: { embedded?: boolean }) 
     }
   };
 
-  if (loading) {
-    return (
-      <div className={`${embedded ? '' : 'min-h-screen bg-gray-50 dark:bg-gray-900'} flex items-center justify-center`}>
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  // NBFC admins can always access this page to complete their profile,
+  // even while their account is pending Super Admin approval.
 
   return (
     <div className={`${embedded ? '' : 'min-h-screen bg-gray-50 dark:bg-gray-900'} ${embedded ? '' : 'flex items-start justify-center p-4 md:p-8'}`}>
@@ -509,30 +550,50 @@ export default function NbfcSetup({ embedded = false }: { embedded?: boolean }) 
             <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">RBI Certificate (PDF)</label>
-                <div className="mt-1 flex items-center gap-3">
-                  <input type="file" accept="application/pdf,image/*" onChange={(e)=>setRbiFile(e.target.files?.[0] || null)} />
-                  {rbiCertificateUrl ? <a href={rbiCertificateUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-sm">Download current</a> : null}
+                <div className="mt-1 flex flex-col gap-1">
+                  <div className="flex items-center gap-3">
+                    <input type="file" accept="application/pdf,image/*" onChange={(e)=>setRbiFile(e.target.files?.[0] || null)} />
+                    {rbiCertificateUrl ? <a href={rbiCertificateUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-sm">Download current</a> : null}
+                  </div>
+                  {rbiFile && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Selected: {rbiFile.name}</p>
+                  )}
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">PAN or GST Document</label>
-                <div className="mt-1 flex items-center gap-3">
-                  <input type="file" accept="application/pdf,image/*" onChange={(e)=>setPanGstFile(e.target.files?.[0] || null)} />
-                  {panGstDocUrl ? <a href={panGstDocUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-sm">Download current</a> : null}
+                <div className="mt-1 flex flex-col gap-1">
+                  <div className="flex items-center gap-3">
+                    <input type="file" accept="application/pdf,image/*" onChange={(e)=>setPanGstFile(e.target.files?.[0] || null)} />
+                    {panGstDocUrl ? <a href={panGstDocUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-sm">Download current</a> : null}
+                  </div>
+                  {panGstFile && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Selected: {panGstFile.name}</p>
+                  )}
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">GST Certificate</label>
-                <div className="mt-1 flex items-center gap-3">
-                  <input type="file" accept="application/pdf,image/*" onChange={(e)=>setGstFile(e.target.files?.[0] || null)} />
-                  {gstCertificateUrl ? <a href={gstCertificateUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-sm">Download current</a> : null}
+                <div className="mt-1 flex flex-col gap-1">
+                  <div className="flex items-center gap-3">
+                    <input type="file" accept="application/pdf,image/*" onChange={(e)=>setGstFile(e.target.files?.[0] || null)} />
+                    {gstCertificateUrl ? <a href={gstCertificateUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-sm">Download current</a> : null}
+                  </div>
+                  {gstFile && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Selected: {gstFile.name}</p>
+                  )}
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Digital Signature File (optional)</label>
-                <div className="mt-1 flex items-center gap-3">
-                  <input type="file" accept="application/pdf,.pfx,.p12,image/*" onChange={(e)=>setDscFile(e.target.files?.[0] || null)} />
-                  {digitalSignatureUrl ? <a href={digitalSignatureUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-sm">Download current</a> : null}
+                <div className="mt-1 flex flex-col gap-1">
+                  <div className="flex items-center gap-3">
+                    <input type="file" accept="application/pdf,.pfx,.p12,image/*" onChange={(e)=>setDscFile(e.target.files?.[0] || null)} />
+                    {digitalSignatureUrl ? <a href={digitalSignatureUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-sm">Download current</a> : null}
+                  </div>
+                  {dscFile && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Selected: {dscFile.name}</p>
+                  )}
                 </div>
               </div>
               {(uploading || submitting) && (

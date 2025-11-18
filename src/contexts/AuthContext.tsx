@@ -23,10 +23,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let profileChannel: ReturnType<typeof supabase.channel> | null = null;
+
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
+      const authUser = session?.user ?? null;
+      setUser(authUser);
+      if (authUser) {
+        fetchProfile(authUser.id);
+        // Listen for realtime changes to this user's profile (e.g., is_active toggled by Super Admin)
+        profileChannel = supabase
+          .channel(`user-profile-${authUser.id}`)
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_profiles', filter: `id=eq.${authUser.id}` }, () => {
+            fetchProfile(authUser.id);
+          })
+          .subscribe();
       } else {
         setLoading(false);
       }
@@ -34,17 +44,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       (async () => {
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          await fetchProfile(session.user.id);
+        const authUser = session?.user ?? null;
+        setUser(authUser);
+        if (authUser) {
+          await fetchProfile(authUser.id);
+          // Re-subscribe to profile changes for the new user
+          if (profileChannel) supabase.removeChannel(profileChannel);
+          profileChannel = supabase
+            .channel(`user-profile-${authUser.id}`)
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_profiles', filter: `id=eq.${authUser.id}` }, () => {
+              fetchProfile(authUser.id);
+            })
+            .subscribe();
         } else {
           setProfile(null);
           setLoading(false);
+          if (profileChannel) {
+            supabase.removeChannel(profileChannel);
+            profileChannel = null;
+          }
         }
       })();
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      if (profileChannel) supabase.removeChannel(profileChannel);
+    };
   }, []);
 
   const fetchProfile = async (userId: string) => {
@@ -82,6 +108,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 email: emailFromAuth,
                 role: (roleFromMeta ?? 'customer'),
                 mobile: mobileSanitized,
+                // Merchants and NBFC/admin users must be approved by Super Admin before they can log in
+                is_active: (roleFromMeta === 'merchant' || roleFromMeta === 'admin') ? false : 
+                          (roleFromMeta === 'customer' || roleFromMeta === 'super_admin') ? true : false,
               },
               { onConflict: 'id' }
             );
@@ -118,6 +147,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     if (error) throw error;
     if (data.user) {
+      // On successful auth, just load the profile. Individual screens will
+      // enforce approval requirements using profile.is_active and role.
       await fetchProfile(data.user.id);
     }
   };
@@ -141,19 +172,92 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Insert profile only if a session exists (e.g., email auto-confirm enabled)
     if (authData.session) {
       const mobileSanitized = (mobile || '').replace(/\D/g, '').slice(-10) || null;
+      // Ensure merchants and admins are ALWAYS inactive by default
+      let isActiveValue: boolean;
+      if (role === 'merchant' || role === 'admin') {
+        isActiveValue = false; // Always inactive for merchants and admins
+      } else if (role === 'customer' || role === 'super_admin') {
+        isActiveValue = true;  // Active for customers and super admins
+      } else {
+        isActiveValue = false; // Default to inactive for any other roles
+      }
+      
+      const profileData = {
+        id: authData.user.id,
+        username,
+        email,
+        role,
+        // Merchants and NBFC/admin users must be approved by Super Admin before they can log in
+        is_active: isActiveValue,
+        mobile: mobileSanitized,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
       const { error: profileError } = await supabase
         .from('user_profiles')
-        .insert({
-          id: authData.user.id,
-          username,
-          email,
-          role,
-          mobile: mobileSanitized,
-        });
+        .insert(profileData);
 
       if (profileError) {
         console.error('Profile creation error:', profileError);
         throw new Error(`Failed to create user profile: ${profileError.message}`);
+      }
+
+      // CRITICAL: Force is_active to false for merchants/admins (override database defaults)
+      // This is essential because the database has DEFAULT true for is_active
+      if (role === 'merchant' || role === 'admin') {
+        // First update attempt
+        const { error: updateError1 } = await supabase
+          .from('user_profiles')
+          .update({ 
+            is_active: false,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', authData.user.id);
+
+        if (updateError1) {
+          console.error('First attempt to set is_active failed:', updateError1);
+          
+          // Second attempt with different approach
+          const { error: updateError2 } = await supabase
+            .from('user_profiles')
+            .upsert({ 
+              id: authData.user.id,
+              is_active: false,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'id' });
+
+          if (updateError2) {
+            console.error('Second attempt to set is_active failed:', updateError2);
+          }
+        }
+
+        // Final verification - ensure the user is definitely inactive
+        const { data: finalCheck } = await supabase
+          .from('user_profiles')
+          .select('is_active')
+          .eq('id', authData.user.id)
+          .single();
+
+        if (finalCheck?.is_active === true) {
+          console.error('CRITICAL: User is still active after all attempts to set inactive');
+          // One more forceful attempt
+          await supabase
+            .from('user_profiles')
+            .update({ is_active: false })
+            .eq('id', authData.user.id);
+        }
+      }
+
+      // Verify the profile was created with correct is_active value
+      const { error: verifyError } = await supabase
+        .from('user_profiles')
+        .select('is_active, role')
+        .eq('id', authData.user.id)
+        .single();
+
+      if (verifyError) {
+        console.error('Error verifying profile creation:', verifyError);
       }
     }
   };

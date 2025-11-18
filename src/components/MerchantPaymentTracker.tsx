@@ -41,6 +41,20 @@ export default function MerchantPaymentTracker() {
     setTimeout(() => tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
   };
 
+  // If merchant profile is inactive, block access to this page and show pending message
+  if (profile && profile.role === 'merchant' && profile.is_active === false) {
+    return (
+      <div className="min-h-[300px] flex items-center justify-center bg-white dark:bg-gray-900 rounded-xl border border-slate-200 dark:border-gray-700">
+        <div className="max-w-lg text-center px-4 py-6">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">Account pending verification</h2>
+          <p className="text-gray-600 dark:text-gray-400">
+            Your merchant account is pending approval by the Super Admin. Once your account is activated, you will be able to view payment tracking details for your customers.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const toCsv = (rows: (string | number)[][]) =>
     rows
       .map((r) =>
