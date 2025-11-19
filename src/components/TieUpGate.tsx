@@ -23,7 +23,7 @@ export default function TieUpGate({ children }: { children: React.ReactNode }) {
     (async () => {
       if (!profile || profile.role !== 'merchant') { setChecking(false); return; }
       // If merchant is not yet approved by Super Admin, first check if their merchant profile exists.
-      // New merchants must be able to complete their profile before we show the pending page.
+      // New merchants can complete their profile but must wait for Super Admin approval before NBFC selection.
       if (profile.is_active === false) {
         const { data: mp, error: mpErr } = await supabase
           .from('merchant_profiles')
@@ -34,13 +34,18 @@ export default function TieUpGate({ children }: { children: React.ReactNode }) {
         if (!mpErr && mp) {
           setHasMerchantProfile(true);
           setMerchantProfileData(mp);
+          // Stay on dashboard where the pending page will be shown by this gate below
+          setState('none');
+          setChecking(false);
+          return;
         } else {
           setHasMerchantProfile(false);
           setMerchantProfileData(null);
+          // Allow them to finish profile inside dashboard without extra checks
+          setState('none');
+          setChecking(false);
+          return;
         }
-        setState('none');
-        setChecking(false);
-        return;
       }
       try {
         // If final tie-up exists with valid admin and nbfc, allow
@@ -54,8 +59,8 @@ export default function TieUpGate({ children }: { children: React.ReactNode }) {
           setChecking(false);
           return;
         }
-        // Merchant is active; mark that a profile effectively exists for gating purposes
-        setHasMerchantProfile(true);
+        // Mark that a profile effectively exists for gating purposes if we haven't already
+        if (hasMerchantProfile === null) setHasMerchantProfile(true);
         // Else check requests
         const { data: req, error: reqErr } = await supabase
           .from('nbfc_tieup_requests')
@@ -81,9 +86,9 @@ export default function TieUpGate({ children }: { children: React.ReactNode }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [profile?.id, profile?.role]);
+  }, [profile?.id, profile?.role, profile?.is_active]);
 
-  // Strict gate: if merchant has no tie-up and no request, force NBFC selection
+  // Strict gate: if merchant is active and has no tie-up and no request, force NBFC selection
   useEffect(() => {
     if (
       !checking &&
@@ -94,7 +99,7 @@ export default function TieUpGate({ children }: { children: React.ReactNode }) {
     ) {
       navigate('/nbfc/select', { replace: true });
     }
-  }, [checking, state, profile?.role, location.pathname, navigate]);
+  }, [checking, state, profile?.is_active, profile?.role, location.pathname, navigate]);
 
   const cancelRequest = async () => {
     if (!requestId) return;
@@ -122,14 +127,8 @@ export default function TieUpGate({ children }: { children: React.ReactNode }) {
   }
 
   if (profile?.role === 'merchant') {
-    // If merchant is inactive but their merchant profile does NOT yet exist,
-    // allow them into the dashboard so they can complete profile.
-    if (profile.is_active === false && hasMerchantProfile === false) {
-      return <>{children}</>;
-    }
-
-    // Once the merchant profile exists and the account is still inactive,
-    // show the pending verification page instead of the full app.
+    // If merchant is inactive and their merchant profile exists, show
+    // the Profile Under Review page while they wait for Super Admin approval.
     if (profile.is_active === false && hasMerchantProfile === true) {
       return (
         <PendingVerificationPage
@@ -137,15 +136,21 @@ export default function TieUpGate({ children }: { children: React.ReactNode }) {
           profileData={{
             business_name: merchantProfileData?.business_name,
             owner_name: merchantProfileData?.owner_name,
-            email: merchantProfileData?.email || profile.email,
-            phone: merchantProfileData?.phone
+            email: merchantProfileData?.email,
+            phone: merchantProfileData?.phone,
           }}
         />
       );
     }
 
+    // If merchant is inactive but their merchant profile does NOT yet exist,
+    // allow them into the dashboard so they can complete profile.
+    if (profile.is_active === false && hasMerchantProfile === false) {
+      return <>{children}</>;
+    }
+
     if (state === 'approved') return <>{children}</>;
-    // Only allow access to NBFC selection if merchant is active and approved
+    // Only allow access to NBFC selection when merchant is active
     if (location.pathname === '/nbfc/select' && profile.is_active === true) return <>{children}</>;
 
     // Blocked states UI

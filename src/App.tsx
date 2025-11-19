@@ -166,12 +166,78 @@ function App() {
             <Route path="/admin/settings" element={<AdminRoute><PageShell><Settings role="admin" /></PageShell></AdminRoute>} />
             <Route path="/admin/tieups" element={<AdminRoute><PageShell><AdminTieUps /></PageShell></AdminRoute>} />
             {/* Merchant standalone pages (no dashboard shell) */}
-            <Route path="/loans" element={<MerchantRoute><PageShell><LoanDetails /></PageShell></MerchantRoute>} />
-            <Route path="/disbursed" element={<MerchantRoute><PageShell><MerchantDisbursedLoans /></PageShell></MerchantRoute>} />
-            <Route path="/payments" element={<MerchantRoute><PageShell><MerchantPaymentTracker /></PageShell></MerchantRoute>} />
-            <Route path="/products" element={<MerchantRoute><PageShell><Product /></PageShell></MerchantRoute>} />
-            <Route path="/merchant/product-loans" element={<MerchantRoute><PageShell><MerchantProductLoans /></PageShell></MerchantRoute>} />
-            <Route path="/merchant/settings" element={<MerchantRoute><PageShell><Settings role="merchant" /></PageShell></MerchantRoute>} />
+            <Route
+              path="/loans"
+              element={
+                <MerchantRoute>
+                  <TieUpGate>
+                    <PageShell>
+                      <LoanDetails />
+                    </PageShell>
+                  </TieUpGate>
+                </MerchantRoute>
+              }
+            />
+            <Route
+              path="/disbursed"
+              element={
+                <MerchantRoute>
+                  <TieUpGate>
+                    <PageShell>
+                      <MerchantDisbursedLoans />
+                    </PageShell>
+                  </TieUpGate>
+                </MerchantRoute>
+              }
+            />
+            <Route
+              path="/payments"
+              element={
+                <MerchantRoute>
+                  <TieUpGate>
+                    <PageShell>
+                      <MerchantPaymentTracker />
+                    </PageShell>
+                  </TieUpGate>
+                </MerchantRoute>
+              }
+            />
+            <Route
+              path="/products"
+              element={
+                <MerchantRoute>
+                  <TieUpGate>
+                    <PageShell>
+                      <Product />
+                    </PageShell>
+                  </TieUpGate>
+                </MerchantRoute>
+              }
+            />
+            <Route
+              path="/merchant/product-loans"
+              element={
+                <MerchantRoute>
+                  <TieUpGate>
+                    <PageShell>
+                      <MerchantProductLoans />
+                    </PageShell>
+                  </TieUpGate>
+                </MerchantRoute>
+              }
+            />
+            <Route
+              path="/merchant/settings"
+              element={
+                <MerchantRoute>
+                  <TieUpGate>
+                    <PageShell>
+                      <Settings role="merchant" />
+                    </PageShell>
+                  </TieUpGate>
+                </MerchantRoute>
+              }
+            />
             {/* Customer area with shared shell/header */}
             <Route path="/customer" element={<CustomerRoute><CustomerShell /></CustomerRoute>}>
               <Route index element={<StorePage />} />

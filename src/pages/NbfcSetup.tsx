@@ -285,16 +285,23 @@ export default function NbfcSetup({ embedded = false }: { embedded?: boolean }) 
           if (inactiveError) {
             console.error('Error setting admin to inactive after profile submission:', inactiveError);
           }
+
+          // Wait until nbfc_profiles row is visible to the app before redirecting
+          try {
+            for (let i = 0; i < 20; i++) {
+              const { data: nb } = await supabase
+                .from('nbfc_profiles')
+                .select('nbfc_id')
+                .eq('nbfc_id', profile.id)
+                .maybeSingle();
+              if (nb?.nbfc_id) break;
+              await new Promise((r) => setTimeout(r, 250));
+            }
+          } catch (_) {}
         }
 
-      // If this is a new profile and user is inactive, they'll see the pending page
-      // Otherwise, redirect to dashboard
-      if (isNewProfile && profile.is_active === false) {
-        // Redirect will be handled by AdminDashboard component showing pending page
-        navigate('/dashboard', { replace: true });
-      } else {
-        navigate('/dashboard', { replace: true });
-      }
+      // Always go to dashboard; NbfcProfileGate will render Under Review while inactive
+      navigate('/dashboard', { replace: true });
     } catch (err: any) {
       setError(err?.message || 'Failed to save NBFC profile');
     } finally {

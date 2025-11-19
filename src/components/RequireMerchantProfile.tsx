@@ -3,9 +3,11 @@ import MerchantProfileGate from './MerchantProfileGate';
 import PendingVerificationPage from './PendingVerificationPage';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { useLocation } from 'react-router-dom';
 
 export default function RequireMerchantProfile({ children }: { children: React.ReactNode }) {
   const { profile } = useAuth();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [hasProfile, setHasProfile] = useState(false);
   const [merchantProfileData, setMerchantProfileData] = useState<any>(null);
@@ -46,6 +48,10 @@ export default function RequireMerchantProfile({ children }: { children: React.R
     
     // If merchant has profile but is not approved by Super Admin, show pending page
     if (hasProfile && profile.is_active === false) {
+      // Allow NBFC selection while inactive so the selection page loads
+      if (location.pathname === '/nbfc/select') {
+        return <>{children}</>;
+      }
       return (
         <PendingVerificationPage
           userType="merchant"

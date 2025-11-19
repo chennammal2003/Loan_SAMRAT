@@ -193,13 +193,30 @@ export default function MerchantProfilePanel({ open, onClose }: MerchantProfileP
       
       setToast({ type: 'success', message: 'Profile saved successfully! Redirecting...' });
       
-      // If this is a new profile, close the panel and let the parent component handle the redirect
+      // If this is a new profile, close the panel and let gates show the pending page
       if (isNewProfile) {
-        setTimeout(() => {
-          onClose();
-          // The parent component (TieUpGate) will detect the new profile and show pending page
-          window.location.reload();
-        }, 1500);
+        // Ensure the user is inactive (failsafe)
+        await supabase
+          .from('user_profiles')
+          .update({ is_active: false, updated_at: new Date().toISOString() })
+          .eq('id', form.merchant_id);
+
+        // Wait until the merchant_profiles row is visible to the app before redirecting
+        try {
+          for (let i = 0; i < 20; i++) {
+            const { data: check } = await supabase
+              .from('merchant_profiles')
+              .select('merchant_id')
+              .eq('merchant_id', form.merchant_id)
+              .maybeSingle();
+            if (check?.merchant_id) break;
+            await new Promise((r) => setTimeout(r, 250));
+          }
+        } catch (_) {}
+
+        onClose();
+        // Navigate to dashboard; gates will render Under Review until Super Admin approves
+        window.location.replace('/dashboard');
       } else {
         setTimeout(() => setToast(null), 3000);
         // Switch back to view mode after save, keep panel open
