@@ -16,10 +16,11 @@ interface Notification {
 
 interface NotificationsPanelProps {
   onApproveUser?: (userId: string, userType: 'merchant' | 'nbfc') => void;
+  onRejectUser?: (userId: string, userType: 'merchant' | 'nbfc') => void;
   onViewUserDetails?: (userId: string) => void;
 }
 
-export default function NotificationsPanel({ onApproveUser, onViewUserDetails }: NotificationsPanelProps) {
+export default function NotificationsPanel({ onApproveUser, onRejectUser, onViewUserDetails }: NotificationsPanelProps) {
   const { profile } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,6 +82,14 @@ export default function NotificationsPanel({ onApproveUser, onViewUserDetails }:
     const userType = notification.payload?.profile_type === 'merchant' ? 'merchant' : 'nbfc';
     if (onApproveUser && notification.payload?.user_id) {
       onApproveUser(notification.payload.user_id, userType);
+      await handleMarkAsRead(notification.id);
+    }
+  };
+
+  const handleReject = async (notification: Notification) => {
+    const userType = notification.payload?.profile_type === 'merchant' ? 'merchant' : 'nbfc';
+    if (onRejectUser && notification.payload?.user_id) {
+      onRejectUser(notification.payload.user_id, userType);
       await handleMarkAsRead(notification.id);
     }
   };
@@ -236,6 +245,14 @@ export default function NotificationsPanel({ onApproveUser, onViewUserDetails }:
                       title="Approve user"
                     >
                       <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
+                    </button>
+
+                    <button
+                      onClick={() => handleReject(notification)}
+                      className="px-2 py-1 rounded bg-red-100 hover:bg-red-200 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:hover:bg-red-800/50 dark:text-red-300"
+                      title="Reject user"
+                    >
+                      Reject
                     </button>
                     
                     {!notification.is_read && (

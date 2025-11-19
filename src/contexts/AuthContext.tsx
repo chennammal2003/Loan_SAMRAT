@@ -99,6 +99,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const mobileSanitized = (mobileFromMetaRaw || '').replace(/\D/g, '').slice(-10) || null;
           const derivedUsername = usernameFromMeta || (emailFromAuth ? emailFromAuth.split('@')[0] : 'user');
 
+          // Role from metadata may be merchant, admin, customer, user, nbfc_admin, or super_admin
+          const resolvedRole = (roleFromMeta ?? 'customer') as UserProfile['role'];
+
           const { error: upsertErr } = await supabase
             .from('user_profiles')
             .upsert(
@@ -106,11 +109,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 id: userId,
                 username: derivedUsername,
                 email: emailFromAuth,
-                role: (roleFromMeta ?? 'customer'),
+                role: resolvedRole,
                 mobile: mobileSanitized,
-                // Merchants and NBFC/admin users must be approved by Super Admin before they can log in
-                is_active: (roleFromMeta === 'merchant' || roleFromMeta === 'admin') ? false : 
-                          (roleFromMeta === 'customer' || roleFromMeta === 'super_admin') ? true : false,
+                // All users start as active by default; any later blocking is enforced in the app
+                is_active: true,
               },
               { onConflict: 'id' }
             );
@@ -172,23 +174,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Insert profile only if a session exists (e.g., email auto-confirm enabled)
     if (authData.session) {
       const mobileSanitized = (mobile || '').replace(/\D/g, '').slice(-10) || null;
-      // Ensure merchants and admins are ALWAYS inactive by default
-      let isActiveValue: boolean;
-      if (role === 'merchant' || role === 'admin') {
-        isActiveValue = false; // Always inactive for merchants and admins
-      } else if (role === 'customer' || role === 'super_admin') {
-        isActiveValue = true;  // Active for customers and super admins
-      } else {
-        isActiveValue = false; // Default to inactive for any other roles
-      }
-      
+
       const profileData = {
         id: authData.user.id,
         username,
         email,
         role,
-        // Merchants and NBFC/admin users must be approved by Super Admin before they can log in
-        is_active: isActiveValue,
+        // All roles (merchant, admin, nbfc_admin, customer, user, super_admin) start active on signup
+        is_active: true,
         mobile: mobileSanitized,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -201,63 +194,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (profileError) {
         console.error('Profile creation error:', profileError);
         throw new Error(`Failed to create user profile: ${profileError.message}`);
-      }
-
-      // CRITICAL: Force is_active to false for merchants/admins (override database defaults)
-      // This is essential because the database has DEFAULT true for is_active
-      if (role === 'merchant' || role === 'admin') {
-        // First update attempt
-        const { error: updateError1 } = await supabase
-          .from('user_profiles')
-          .update({ 
-            is_active: false,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', authData.user.id);
-
-        if (updateError1) {
-          console.error('First attempt to set is_active failed:', updateError1);
-          
-          // Second attempt with different approach
-          const { error: updateError2 } = await supabase
-            .from('user_profiles')
-            .upsert({ 
-              id: authData.user.id,
-              is_active: false,
-              updated_at: new Date().toISOString()
-            }, { onConflict: 'id' });
-
-          if (updateError2) {
-            console.error('Second attempt to set is_active failed:', updateError2);
-          }
-        }
-
-        // Final verification - ensure the user is definitely inactive
-        const { data: finalCheck } = await supabase
-          .from('user_profiles')
-          .select('is_active')
-          .eq('id', authData.user.id)
-          .single();
-
-        if (finalCheck?.is_active === true) {
-          console.error('CRITICAL: User is still active after all attempts to set inactive');
-          // One more forceful attempt
-          await supabase
-            .from('user_profiles')
-            .update({ is_active: false })
-            .eq('id', authData.user.id);
-        }
-      }
-
-      // Verify the profile was created with correct is_active value
-      const { error: verifyError } = await supabase
-        .from('user_profiles')
-        .select('is_active, role')
-        .eq('id', authData.user.id)
-        .single();
-
-      if (verifyError) {
-        console.error('Error verifying profile creation:', verifyError);
       }
     }
   };

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { createProfileSubmissionNotification } from '../lib/notifications';
 import { useTheme } from '../contexts/ThemeContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -63,7 +64,7 @@ const genCode = (biz: string, location: string, seed: string) => {
 };
 
 export default function MerchantProfileGate({ onDone }: Props) {
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const [loading, setLoading] = useState(true);
@@ -189,6 +190,44 @@ export default function MerchantProfileGate({ onDone }: Props) {
             updated_at: new Date().toISOString(),
           });
         if (insErr) throw insErr;
+      }
+
+      // Whenever merchant saves profile, send notification and mark merchant inactive
+      {
+        try {
+          await createProfileSubmissionNotification({
+            type: 'merchant_profile_submitted',
+            userId: profile.id,
+            userName: form.owner_name || profile.username || 'Unknown',
+            userEmail: form.email || profile.email || 'Unknown',
+            profileData: {
+              business_name: form.business_name,
+              business_type: form.business_type,
+              business_category: form.business_category,
+              phone: form.phone,
+            },
+          });
+        } catch (e) {
+          console.error('Failed to create merchant profile submission notification', e);
+        }
+
+        // Ensure merchant is set inactive until Super Admin approval
+        try {
+          await supabase
+            .from('user_profiles')
+            .update({
+              is_active: false,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', profile.id);
+        } catch (e) {
+          console.error('Failed to set merchant inactive after profile submission', e);
+        }
+
+        // Refresh auth profile so TieUpGate sees is_active=false
+        try {
+          await refreshProfile?.();
+        } catch (_) {}
       }
 
       setMerchantId(code);

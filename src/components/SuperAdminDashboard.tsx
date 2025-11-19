@@ -287,6 +287,36 @@ export default function SuperAdminDashboard() {
     });
   }, [users, selectedType, searchQuery]);
 
+  const handleApproveUserFromNotification = async (userId: string, userType: 'merchant' | 'nbfc') => {
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ is_active: true, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+      if (error) throw error;
+
+      // Update local state so UI shows Approved immediately
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, is_active: true } : u)));
+    } catch (e) {
+      console.error('Failed to approve user from notification', e);
+    }
+  };
+
+  const handleRejectUserFromNotification = async (userId: string, userType: 'merchant' | 'nbfc') => {
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+      if (error) throw error;
+
+      // Update local state so UI shows Pending/Inactive immediately
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, is_active: false } : u)));
+    } catch (e) {
+      console.error('Failed to reject user from notification', e);
+    }
+  };
+
   const handleToggleStatus = async (userId: string, currentStatus: boolean) => {
     try {
       const { error: err } = await supabase
@@ -509,6 +539,19 @@ export default function SuperAdminDashboard() {
                   {pendingApprovals.total}
                 </span>
               )}
+
+          {activeTab === 'notifications' && (
+            <NotificationsPanel
+              onApproveUser={handleApproveUserFromNotification}
+              onRejectUser={handleRejectUserFromNotification}
+              onViewUserDetails={(userId) => {
+                const u = users.find((usr) => usr.id === userId);
+                if (u) {
+                  handleViewDetails(u);
+                }
+              }}
+            />
+          )}
             </button>
           </div>
         </nav>

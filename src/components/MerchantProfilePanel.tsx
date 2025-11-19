@@ -49,7 +49,7 @@ const emptyForm = (merchant_id: string, defaults?: Partial<MerchantProfileForm>)
 });
 
 export default function MerchantProfilePanel({ open, onClose }: MerchantProfilePanelProps) {
-  const { profile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
   const [form, setForm] = useState<MerchantProfileForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -161,8 +161,8 @@ export default function MerchantProfilePanel({ open, onClose }: MerchantProfileP
         );
       if (error) throw error;
       
-      // Create notification for Super Admin if this is a new profile
-      if (isNewProfile) {
+      // Create notification for Super Admin on every save and ensure merchant is inactive until approval
+      {
         await createProfileSubmissionNotification({
           type: 'merchant_profile_submitted',
           userId: form.merchant_id,
@@ -201,21 +201,34 @@ export default function MerchantProfilePanel({ open, onClose }: MerchantProfileP
           .update({ is_active: false, updated_at: new Date().toISOString() })
           .eq('id', form.merchant_id);
 
-        // Wait until the merchant_profiles row is visible to the app before redirecting
+        // Wait until the merchant_profiles row is visible to the app
+        // and user_profiles reflects is_active=false before redirecting
         try {
           for (let i = 0; i < 20; i++) {
-            const { data: check } = await supabase
-              .from('merchant_profiles')
-              .select('merchant_id')
-              .eq('merchant_id', form.merchant_id)
-              .maybeSingle();
-            if (check?.merchant_id) break;
+            const [{ data: mp }, { data: up }] = await Promise.all([
+              supabase
+                .from('merchant_profiles')
+                .select('merchant_id')
+                .eq('merchant_id', form.merchant_id)
+                .maybeSingle(),
+              supabase
+                .from('user_profiles')
+                .select('is_active')
+                .eq('id', form.merchant_id)
+                .maybeSingle(),
+            ]);
+            if (mp?.merchant_id && up && up.is_active === false) break;
             await new Promise((r) => setTimeout(r, 250));
           }
         } catch (_) {}
 
+        // Refresh profile so is_active=false is reflected in AuthContext
+        try {
+          await refreshProfile?.();
+        } catch (_) {}
+
         onClose();
-        // Navigate to dashboard; gates will render Under Review until Super Admin approves
+        // Navigate to dashboard; TieUpGate will render Profile Under Review while inactive
         window.location.replace('/dashboard');
       } else {
         setTimeout(() => setToast(null), 3000);

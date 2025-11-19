@@ -1,5 +1,5 @@
 import { UserProfile } from '../types';
-import { Mail, Phone, Calendar, ToggleLeft, ToggleRight, Eye, Edit2 } from 'lucide-react';
+import { Phone, Calendar, ToggleLeft, ToggleRight, Eye } from 'lucide-react';
 
 interface UserTableProps {
   users: UserProfile[];
@@ -98,18 +98,26 @@ export function UserTable({ users, onViewDetails, onToggleStatus }: UserTablePro
                 </td>
                 <td className="px-6 py-4">
                   <button
-                    onClick={() => onToggleStatus(user.id, user.is_active)}
+                    onClick={() => onToggleStatus(user.id, !!user.is_active)}
                     className="group flex items-center"
                   >
                     {user.is_active ? (
                       <>
                         <ToggleRight className="mr-2 h-6 w-6 text-green-500 transition-transform group-hover:scale-110" />
-                        <span className="font-medium text-green-700">Active</span>
+                        <span className="font-medium text-green-700">
+                          {user.role === 'merchant' || user.role === 'admin' || user.role === 'nbfc_admin'
+                            ? 'Approved'
+                            : 'Active'}
+                        </span>
                       </>
                     ) : (
                       <>
                         <ToggleLeft className="mr-2 h-6 w-6 text-gray-400 transition-transform group-hover:scale-110" />
-                        <span className="font-medium text-gray-500">Inactive</span>
+                        <span className="font-medium text-gray-500">
+                          {user.role === 'merchant' || user.role === 'admin' || user.role === 'nbfc_admin'
+                            ? 'Pending Approval'
+                            : 'Inactive'}
+                        </span>
                       </>
                     )}
                   </button>

@@ -10,12 +10,11 @@ export interface NotificationData {
 
 export async function createProfileSubmissionNotification(data: NotificationData) {
   try {
-    // Get all super admins
+    // Get all super admins (regardless of is_active), so they always receive profile notifications
     const { data: superAdmins, error: adminError } = await supabase
       .from('user_profiles')
       .select('id')
-      .eq('role', 'super_admin')
-      .eq('is_active', true);
+      .eq('role', 'super_admin');
 
     if (adminError) {
       console.error('Error fetching super admins:', adminError);
