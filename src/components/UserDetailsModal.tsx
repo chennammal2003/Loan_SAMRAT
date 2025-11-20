@@ -8,7 +8,7 @@ interface UserDetailsModalProps {
 }
 
 export function UserDetailsModal({ user, additionalDetails, onClose }: UserDetailsModalProps) {
-  const isNBFC = user.role === 'nbfc_admin';
+  const isNBFC = user.role === 'nbfc_admin' || user.role === 'admin';
   const isMerchant = user.role === 'merchant';
 
   return (

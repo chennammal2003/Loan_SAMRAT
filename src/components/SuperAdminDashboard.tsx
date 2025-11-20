@@ -136,6 +136,7 @@ export default function SuperAdminDashboard() {
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [selectedDetails, setSelectedDetails] = useState<MerchantProfile | NBFCProfile | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [showPendingDropdown, setShowPendingDropdown] = useState(false);
 
   const pendingApprovals = useMemo(() => {
     const pendingMerchants = users.filter(
@@ -150,6 +151,16 @@ export default function SuperAdminDashboard() {
       total: pendingMerchants + pendingNbfc,
     };
   }, [users]);
+
+  const pendingUsersList = useMemo(
+    () =>
+      users.filter(
+        (u) =>
+          u.is_active === false &&
+          (u.role === 'merchant' || u.role === 'nbfc_admin' || u.role === 'admin')
+      ),
+    [users]
+  );
 
   useEffect(() => {
     fetchUsers();
@@ -462,6 +473,25 @@ export default function SuperAdminDashboard() {
           .maybeSingle();
         if (!err && data) {
           setSelectedDetails(data as NBFCProfile);
+
+          // Also hydrate base user profile with NBFC contact details when missing
+          const enrichedFromNbfc = {
+            ...enrichedUser,
+            address:
+              (enrichedUser as any).address ||
+              (data as any).head_office_address ||
+              (enrichedUser as any).address,
+            phone:
+              (enrichedUser as any).phone ||
+              (data as any).contact_number ||
+              (enrichedUser as any).mobile,
+            email:
+              (enrichedUser as any).email ||
+              (data as any).official_email ||
+              (enrichedUser as any).email,
+          } as UserProfile;
+
+          setSelectedUser(enrichedFromNbfc);
         }
       } catch (e) {
         console.error('Failed to load NBFC profile', e);
@@ -575,15 +605,14 @@ export default function SuperAdminDashboard() {
 
       <main className="flex-1 flex flex-col">
         <header className="bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-20">
-          <div className="px-8 py-4 flex justify-between items-center">
+          <div className="px-8 py-4 flex justify-between items-center relative">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Super Admin Dashboard</h1>
             <div className="flex items-center gap-4">
               {pendingApprovals.total > 0 && (
                 <button
                   type="button"
                   onClick={() => {
-                    setActiveTab('users');
-                    setSelectedType('all');
+                    setShowPendingDropdown((prev) => !prev);
                   }}
                   className="relative inline-flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 border border-red-200 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-300 dark:border-red-700"
                 >
@@ -593,6 +622,41 @@ export default function SuperAdminDashboard() {
                     {pendingApprovals.total}
                   </span>
                 </button>
+              )}
+              {showPendingDropdown && pendingUsersList.length > 0 && (
+                <div className="absolute right-8 top-14 z-30 w-80 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
+                  <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">Pending Users</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{pendingUsersList.length}</span>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto">
+                    {pendingUsersList.map((u) => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('users');
+                          if (u.role === 'merchant') {
+                            setSelectedType('merchant');
+                          } else {
+                            setSelectedType('nbfc_admin');
+                          }
+                          setShowPendingDropdown(false);
+                          handleViewDetails(u);
+                        }}
+                        className="w-full px-4 py-2 flex items-center justify-between text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700"
+                     >
+                        <div>
+                          <p className="font-medium text-gray-800 dark:text-gray-100">{u.username || u.email}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{u.email}</p>
+                        </div>
+                        <span className="text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 uppercase">
+                          {u.role === 'merchant' ? 'MERCHANT' : 'NBFC ADMIN'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
               <button
                 onClick={toggleTheme}

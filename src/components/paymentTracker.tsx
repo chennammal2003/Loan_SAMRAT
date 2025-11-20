@@ -30,7 +30,11 @@ interface LoanApplication {
   totalPayments: number;
   mobileNumber: string;
   introducedBy: string;
+  productImageUrl?: string | null;
+  productName?: string | null;
 }
+
+const formatLoanId = (id: string) => `LOAN-${String(id).slice(0, 8)}`;
 
 const PaymentTracker: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -52,10 +56,10 @@ const PaymentTracker: React.FC = () => {
       setError(null);
       try {
         const { data, error } = await supabase
-          .from('loans')
+          .from('product_loans')
           .select('*')
           .eq('status', 'Loan Disbursed')
-          .order('disbursed_at', { ascending: false });
+          .order('created_at', { ascending: false });
         if (error) throw error;
         const loanRows = data || [];
         // try to fetch latest disbursement_date for these loans to drive schedule
@@ -98,7 +102,7 @@ const PaymentTracker: React.FC = () => {
         }
         const rows = loanRows.map((l: any) => {
           const fullName = `${l.first_name ?? ''} ${l.last_name ?? ''}`.trim();
-          const loanAmount = Number(l.amount_disbursed ?? l.loan_amount ?? 0);
+          const loanAmount = Number(l.loan_amount ?? 0);
           const tenure = Number(l.tenure ?? 0);
           // EMI at 36% p.a. => monthly 3%
           const r = 0.36 / 12;
@@ -150,13 +154,13 @@ const PaymentTracker: React.FC = () => {
 
           return {
             id: l.id,
-            applicationNumber: String(l.application_number || l.id),
+            applicationNumber: String(l.id),
             createdAt: String(l.created_at || ''),
             fullName,
             loanAmount,
             tenure,
             interestScheme: String(l.interest_scheme ?? ''),
-            disbursedDate: byId[l.id] ?? l.disbursement_date ?? l.disbursed_at ?? l.created_at,
+            disbursedDate: byId[l.id] ?? l.gold_price_lock_date ?? l.created_at,
             emiAmount,
             totalPayable,
             paidAmount,
@@ -167,6 +171,8 @@ const PaymentTracker: React.FC = () => {
             totalPayments: tenure,
             mobileNumber: l.mobile_primary ?? '-',
             introducedBy: l.introduced_by ?? '-',
+            productImageUrl: l.product_image_url ?? null,
+            productName: l.product_name ?? null,
           } as LoanApplication;
         });
         setLoans(rows);
@@ -180,7 +186,7 @@ const PaymentTracker: React.FC = () => {
     fetchLoans();
     const ch = supabase
       .channel('payments-tracker')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'loans' }, () => fetchLoans())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'product_loans' }, () => fetchLoans())
       .subscribe();
     const ch2 = supabase
       .channel('payments-tracker-payments')
@@ -425,7 +431,7 @@ const PaymentTracker: React.FC = () => {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search by name or application number..."
+                placeholder="Search by name or loan ID..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 border border-slate-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
@@ -484,7 +490,7 @@ const PaymentTracker: React.FC = () => {
               <thead className="bg-slate-50 dark:bg-gray-700 border-b border-slate-200 dark:border-gray-700">
                 <tr>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Name</th>
-                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Application Number</th>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Loan ID</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Loan Amount</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Tenure</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Paid / Total EMI</th>
@@ -507,7 +513,7 @@ const PaymentTracker: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-4 px-6">
-                        <span className="font-semibold text-slate-800 dark:text-white">{loan.applicationNumber}</span>
+                        <span className="font-semibold text-slate-800 dark:text-white">{formatLoanId(loan.id)}</span>
                       </td>
                       <td className="py-4 px-6">
                         <span className="font-semibold text-slate-800 dark:text-white">₹{loan.loanAmount.toLocaleString('en-IN')}</span>

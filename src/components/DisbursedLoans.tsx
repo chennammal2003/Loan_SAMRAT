@@ -1,12 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Eye, HandCoins } from 'lucide-react';
-import { supabase, LoanApplication } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import LoanDetailsModal from './LoanDetailsModal';
 
+interface ProductLoanRow {
+  id: string;
+  first_name: string;
+  last_name: string;
+  loan_amount: number;
+  tenure: number;
+  created_at: string;
+  mobile_primary: string;
+  email_id: string;
+  address: string;
+  status: string;
+  application_number?: string | null;
+  [key: string]: any;
+}
+
+const formatLoanId = (id: string) => `LOAN-${String(id).slice(0, 8)}`;
+
 export default function DisbursedLoans() {
-  const [loans, setLoans] = useState<LoanApplication[]>([]);
+  const [loans, setLoans] = useState<ProductLoanRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedLoan, setSelectedLoan] = useState<LoanApplication | null>(null);
+  const [selectedLoan, setSelectedLoan] = useState<ProductLoanRow | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 7;
@@ -18,13 +35,13 @@ export default function DisbursedLoans() {
   const fetchLoans = async () => {
     try {
       const { data, error } = await supabase
-        .from('loans')
+        .from('product_loans')
         .select('*')
         .eq('status', 'Loan Disbursed')
         .order('updated_at', { ascending: false });
 
       if (error) throw error;
-      setLoans(data || []);
+      setLoans((data as any) || []);
     } catch (error) {
       console.error('Error fetching disbursed loans:', error);
     } finally {
@@ -89,7 +106,7 @@ export default function DisbursedLoans() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name, phone, email, address, application ID"
+            placeholder="Search name, phone, email, address, loan ID"
             className="w-full md:w-80 px-3 py-2 rounded border bg-white dark:bg-gray-800 dark:border-gray-700 text-sm"
           />
         </div>
@@ -100,7 +117,7 @@ export default function DisbursedLoans() {
           <table className="w-full">
             <thead className="bg-purple-50 dark:bg-purple-900/20">
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Application ID</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Loan ID</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Name</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Loan Amount</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Tenure</th>
@@ -114,7 +131,7 @@ export default function DisbursedLoans() {
               {pageItems.map((loan) => (
                 <tr key={loan.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
-                    {loan.application_number || 'N/A'}
+                    {formatLoanId(loan.id)}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
                     {loan.first_name} {loan.last_name}

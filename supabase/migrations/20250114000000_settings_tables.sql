@@ -122,3 +122,4 @@ CREATE INDEX IF NOT EXISTS idx_user_preferences_user_id ON user_preferences(user
 CREATE INDEX IF NOT EXISTS idx_system_settings_user_id ON system_settings(user_id);
 CREATE INDEX IF NOT EXISTS idx_billing_info_user_id ON billing_info(user_id);
 
+

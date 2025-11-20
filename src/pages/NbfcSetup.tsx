@@ -22,7 +22,7 @@ const TABS = [
 ] as const;
 
 export default function NbfcSetup({ embedded = false }: { embedded?: boolean }) {
-  const { profile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const [loading, setLoading] = useState(true);
@@ -241,64 +241,52 @@ export default function NbfcSetup({ embedded = false }: { embedded?: boolean }) 
         updated_at: new Date().toISOString(),
       } as const;
 
-      // Check if this is a new profile submission (first time save)
-      const { data: existingProfile } = await supabase
-        .from('nbfc_profiles')
-        .select('nbfc_id')
-        .eq('nbfc_id', profile.id)
-        .maybeSingle();
-      
-      const isNewProfile = !existingProfile;
-
+      // Upsert NBFC profile (supports both first-time create and edits)
       const { error } = await supabase
         .from('nbfc_profiles')
         .upsert(payload, { onConflict: 'nbfc_id' });
 
       if (error) throw error;
 
-        // Create notification for Super Admin if this is a new profile
-        if (isNewProfile) {
-          await createProfileSubmissionNotification({
-            type: 'nbfc_profile_submitted',
-            userId: profile.id,
-            userName: profile.username || 'Unknown',
-            userEmail: profile.email || 'Unknown',
-            profileData: {
-              nbfc_name: name,
-              nbfc_type: nbfcType,
-              interest_rate: ir,
-              cin_number: cinNumber,
-              rbi_license_number: rbiLicenseNumber
-            }
-          });
+      // Whenever NBFC profile is saved, send notification and mark admin inactive
+      try {
+        await createProfileSubmissionNotification({
+          type: 'nbfc_profile_submitted',
+          userId: profile.id,
+          userName: profile.username || 'Unknown',
+          userEmail: profile.email || 'Unknown',
+          profileData: {
+            nbfc_name: name,
+            nbfc_type: nbfcType,
+            interest_rate: ir,
+            cin_number: cinNumber,
+            rbi_license_number: rbiLicenseNumber,
+          },
+        });
+      } catch (notifyErr) {
+        console.error('Failed to create NBFC profile submission notification', notifyErr);
+      }
 
-          // CRITICAL: Ensure admin is set to inactive after profile submission
-          // This is a failsafe in case the signup process didn't set it correctly
-          const { error: inactiveError } = await supabase
-            .from('user_profiles')
-            .update({ 
-              is_active: false,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', profile.id);
-
-          if (inactiveError) {
-            console.error('Error setting admin to inactive after profile submission:', inactiveError);
-          }
-
-          // Wait until nbfc_profiles row is visible to the app before redirecting
-          try {
-            for (let i = 0; i < 20; i++) {
-              const { data: nb } = await supabase
-                .from('nbfc_profiles')
-                .select('nbfc_id')
-                .eq('nbfc_id', profile.id)
-                .maybeSingle();
-              if (nb?.nbfc_id) break;
-              await new Promise((r) => setTimeout(r, 250));
-            }
-          } catch (_) {}
+      // Ensure admin is set inactive until Super Admin approval
+      try {
+        const { error: inactiveError } = await supabase
+          .from('user_profiles')
+          .update({
+            is_active: false,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', profile.id);
+        if (inactiveError) {
+          console.error('Error setting admin to inactive after NBFC profile save:', inactiveError);
         }
+      } catch (inactiveOuterErr) {
+        console.error('Unexpected error while setting admin inactive after NBFC profile save:', inactiveOuterErr);
+      }
+
+      // Refresh profile so NbfcProfileGate sees is_active=false
+      try {
+        await refreshProfile?.();
+      } catch (_) {}
 
       // Always go to dashboard; NbfcProfileGate will render Under Review while inactive
       navigate('/dashboard', { replace: true });

@@ -1,34 +1,65 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Eye, FileText } from 'lucide-react';
-import { supabase, LoanApplication } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import LoanDetailsModal from './LoanDetailsModal';
- 
+
+interface ProductLoanRow {
+  id: string;
+  first_name: string;
+  last_name: string;
+  loan_amount: number;
+  tenure: number;
+  created_at: string;
+  mobile_primary: string;
+  email_id: string;
+  address: string;
+  status: string;
+  application_number?: string | null;
+  [key: string]: any;
+}
+
+const formatLoanId = (id: string) => `LOAN-${String(id).slice(0, 8)}`;
+
 export default function AcceptedLoans() {
-  const [loans, setLoans] = useState<LoanApplication[]>([]);
+  const [loans, setLoans] = useState<ProductLoanRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedLoan, setSelectedLoan] = useState<LoanApplication | null>(null);
+  const [selectedLoan, setSelectedLoan] = useState<ProductLoanRow | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 7;
   const downloadCSV = () => {
     const rows = filtered;
     const headers = [
-      'Full Name','Application Number','Interest Scheme','Loan Amount','Tenure','Gold Lock','Status','Phone Number','Aadhaar Number','PAN Number','Address','Down Payment','Father/Mother/Spouse Name','Reference1','Reference2'
+      'Full Name',
+      'Loan ID',
+      'Interest Scheme',
+      'Loan Amount',
+      'Tenure',
+      'Gold Lock',
+      'Status',
+      'Phone Number',
+      'Aadhaar Number',
+      'PAN Number',
+      'Address',
+      'Down Payment',
+      'Father/Mother/Spouse Name',
+      'Reference1',
+      'Reference2',
     ];
     const escape = (v: any) => {
       const s = v === null || v === undefined ? '' : String(v);
       const needsQuotes = /[",\n]/.test(s);
-      const t = s.replace(/\"/g,'\"\"');
+      const t = s.replace(/\"/g, '\"\"');
       return needsQuotes ? `\"${t}\"` : t;
     };
     const textify = (v: any) => (v === null || v === undefined || v === '' ? '' : `="${String(v)}"`);
     const lines = [headers.join(',')];
-    rows.forEach(l => {
+    rows.forEach((l) => {
       const ref1 = [l.reference1_name, l.reference1_contact, l.reference1_relationship].filter(Boolean).join(' | ');
       const ref2 = [l.reference2_name, l.reference2_contact, l.reference2_relationship].filter(Boolean).join(' | ');
       const line = [
         escape(`${l.first_name} ${l.last_name}`),
-        textify(l.application_number || ''),
+        textify(l.id),
         escape(l.interest_scheme),
         textify(l.loan_amount),
         textify(l.tenure),
@@ -41,7 +72,7 @@ export default function AcceptedLoans() {
         escape(l.down_payment_details || ''),
         escape(l.father_mother_spouse_name),
         escape(ref1),
-        escape(ref2)
+        escape(ref2),
       ].join(',');
       lines.push(line);
     });
@@ -49,7 +80,7 @@ export default function AcceptedLoans() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    const now = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+    const now = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
     a.download = `Accepted_Loans_${now}.csv`;
     document.body.appendChild(a);
     a.click();
@@ -64,13 +95,13 @@ export default function AcceptedLoans() {
   const fetchLoans = async () => {
     try {
       const { data, error } = await supabase
-        .from('loans')
+        .from('product_loans')
         .select('*')
-        .in('status', ['Accepted','Verified','Loan Disbursed'])
+        .in('status', ['Accepted', 'Loan Disbursed'])
         .order('updated_at', { ascending: false });
 
       if (error) throw error;
-      setLoans(data || []);
+      setLoans((data as any) || []);
     } catch (error) {
       console.error('Error fetching loans:', error);
     } finally {
@@ -138,7 +169,7 @@ export default function AcceptedLoans() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name, phone, email, address, application ID"
+            placeholder="Search name, phone, email, address, loan ID"
             className="w-full md:w-80 px-3 py-2 rounded border bg-white dark:bg-gray-800 dark:border-gray-700 text-sm"
           />
           <button onClick={downloadCSV} className="px-3 py-2 rounded bg-emerald-600 text-white text-sm hover:bg-emerald-700">Download Excel</button>
@@ -150,7 +181,7 @@ export default function AcceptedLoans() {
           <table className="w-full">
             <thead className="bg-green-50 dark:bg-green-900/20">
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Application ID</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Loan ID</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Name</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Loan Amount</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Tenure</th>
@@ -164,7 +195,7 @@ export default function AcceptedLoans() {
               {pageItems.map((loan) => (
                 <tr key={loan.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
-                    {loan.application_number || 'N/A'}
+                    {formatLoanId(loan.id)}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
                     {loan.first_name} {loan.last_name}
