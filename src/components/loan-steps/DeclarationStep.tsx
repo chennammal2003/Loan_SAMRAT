@@ -60,6 +60,14 @@ export default function DeclarationStep({ formData, setFormData }: DeclarationSt
               {formData.emailId}
             </p>
           </div>
+          {formData.referralCode && (
+            <div className="bg-green-50 dark:bg-green-900/30 p-4 rounded-lg border border-green-200 dark:border-green-800">
+              <p className="text-gray-500 dark:text-gray-400 mb-1">Referral Code</p>
+              <p className="font-semibold text-green-700 dark:text-green-300">
+                ✓ {formData.referralCode}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

@@ -26,6 +26,7 @@ interface ProductLoan {
   created_at: string;
   updated_at: string;
   application_number?: string;
+  referral_code?: string;
 }
 
 interface ProductLoanRow extends ProductLoan {
@@ -379,6 +380,7 @@ export default function AdminProductLoans() {
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Loan ID</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Product</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Source</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Referral Code</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Applicant Name</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Email</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Mobile</th>
@@ -462,6 +464,15 @@ export default function AdminProductLoans() {
                         </span>
                       ) : (
                         <span className="inline-flex px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs">Direct</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {(loan as any).referral_code ? (
+                        <code className="px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-xs font-mono">
+                          {loan.referral_code}
+                        </code>
+                      ) : (
+                        <span className="text-slate-400 dark:text-gray-500">—</span>
                       )}
                     </td>
                     <td className="px-6 py-4">

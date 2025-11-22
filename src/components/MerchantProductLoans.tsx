@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Eye, Download, Lock } from 'lucide-react';
+import { Eye, Download, Lock, Calendar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import DocsModal from './DocsModal';
 import { useAuth } from '../contexts/AuthContext';
@@ -25,6 +25,9 @@ interface ProductLoan {
   merchant_id?: string;
   created_at: string;
   updated_at: string;
+  product_delivered_date?: string;
+  product_delivery_status?: string;
+  referral_code?: string;
 }
 
 export default function MerchantProductLoans() {
@@ -41,6 +44,9 @@ export default function MerchantProductLoans() {
   const pageSize = 10;
   const [docsSet, setDocsSet] = useState<Set<string>>(new Set());
   const [productInfoLoan, setProductInfoLoan] = useState<ProductLoan | null>(null);
+  const [deliveryModalLoan, setDeliveryModalLoan] = useState<ProductLoan | null>(null);
+  const [deliveryDate, setDeliveryDate] = useState<string>('');
+  const [savingDeliveryDate, setSavingDeliveryDate] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -226,6 +232,53 @@ export default function MerchantProductLoans() {
     }
   };
 
+  const handleSaveDeliveryDate = async () => {
+    if (!deliveryModalLoan || !deliveryDate) {
+      alert('Please select a delivery date');
+      return;
+    }
+
+    setSavingDeliveryDate(true);
+    try {
+      // Update the product_loans table with delivery date and status
+      // The database trigger will automatically:
+      // 1. Set product_delivery_status = 'Product Delivered'
+      // 2. Change status from 'Loan Disbursed' to 'Delivered'
+      const { error } = await supabase
+        .from('product_loans')
+        .update({
+          product_delivered_date: deliveryDate,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', deliveryModalLoan.id);
+
+      if (error) throw error;
+
+      // Update local state with new status
+      // The database trigger will update status to 'Delivered'
+      setLoans(prev => prev.map(l => 
+        l.id === deliveryModalLoan.id 
+          ? { 
+              ...l, 
+              product_delivered_date: deliveryDate, 
+              product_delivery_status: 'Product Delivered',
+              status: 'Delivered' // Updated status
+            }
+          : l
+      ));
+
+      // Close modal and reset
+      setDeliveryModalLoan(null);
+      setDeliveryDate('');
+      alert('Product delivery date saved successfully! Status updated to "Delivered"');
+    } catch (error) {
+      console.error('Error saving delivery date:', error);
+      alert('Failed to save delivery date. Please try again.');
+    } finally {
+      setSavingDeliveryDate(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -297,6 +350,7 @@ export default function MerchantProductLoans() {
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Loan ID</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Product</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Source</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Referral Code</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Applicant</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Loan Amount</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Tenure</th>
@@ -367,6 +421,15 @@ export default function MerchantProductLoans() {
                       )}
                     </td>
                     <td className="px-6 py-4">
+                      {(loan as any).referral_code ? (
+                        <code className="px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-xs font-mono">
+                          {loan.referral_code}
+                        </code>
+                      ) : (
+                        <span className="text-slate-400 dark:text-gray-500">—</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
                       <div>
                         <button
                           onClick={() => setSelectedLoan(loan)}
@@ -400,12 +463,33 @@ export default function MerchantProductLoans() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(loan.status)}`}
-                        title={`Status updated: ${new Date(loan.updated_at).toLocaleString()}`}
-                      >
-                        {loan.status}
-                      </span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(loan.status)}`}
+                          title={`Status updated: ${new Date(loan.updated_at).toLocaleString()}`}
+                        >
+                          {loan.status}
+                        </span>
+                        {loan.status === 'Loan Disbursed' && !loan.product_delivered_date && (
+                          <button
+                            onClick={() => {
+                              setDeliveryModalLoan(loan);
+                              setDeliveryDate('');
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                            title="Mark product as delivered"
+                          >
+                            <Calendar size={12} />
+                            <span>Mark Delivered</span>
+                          </button>
+                        )}
+                        {loan.product_delivered_date && (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                            <Calendar size={12} />
+                            {new Date(loan.product_delivered_date).toLocaleDateString('en-IN')}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-sm">
                       {docsSet.has(loan.id) ? (
@@ -493,6 +577,63 @@ export default function MerchantProductLoans() {
           onClose={() => setShowDocsFor(null)}
           loanType="product"
         />
+      )}
+
+      {deliveryModalLoan && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full">
+            <div className="flex justify-between items-center p-6 border-b border-slate-200 dark:border-gray-700">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Mark Product Delivered</h2>
+              <button
+                onClick={() => setDeliveryModalLoan(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <p className="text-sm text-slate-600 dark:text-gray-400 mb-2">
+                  <strong>Customer:</strong> {deliveryModalLoan.first_name} {deliveryModalLoan.last_name}
+                </p>
+                <p className="text-sm text-slate-600 dark:text-gray-400 mb-4">
+                  <strong>Product:</strong> {deliveryModalLoan.product_name}
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">
+                  <Calendar className="inline mr-2" size={16} />
+                  Product Delivery Date
+                </label>
+                <input
+                  type="date"
+                  value={deliveryDate}
+                  onChange={(e) => setDeliveryDate(e.target.value)}
+                  max={new Date().toISOString().split('T')[0]}
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  disabled={savingDeliveryDate}
+                />
+                <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">Select the date when product was delivered to customer</p>
+              </div>
+            </div>
+            <div className="p-4 border-t border-slate-200 dark:border-gray-700 flex gap-2 justify-end">
+              <button
+                onClick={() => setDeliveryModalLoan(null)}
+                className="px-4 py-2 rounded-lg border border-slate-300 dark:border-gray-600 text-slate-900 dark:text-white hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors"
+                disabled={savingDeliveryDate}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveDeliveryDate}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                disabled={!deliveryDate || savingDeliveryDate}
+              >
+                {savingDeliveryDate ? 'Saving...' : 'Save Delivery Date'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

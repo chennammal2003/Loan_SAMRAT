@@ -32,6 +32,8 @@ interface LoanApplication {
   introducedBy: string;
   productImageUrl?: string | null;
   productName?: string | null;
+  productDeliveredDate?: string | null;
+  productDeliveryStatus?: string | null;
 }
 
 const formatLoanId = (id: string) => `LOAN-${String(id).slice(0, 8)}`;
@@ -173,6 +175,8 @@ const PaymentTracker: React.FC = () => {
             introducedBy: l.introduced_by ?? '-',
             productImageUrl: l.product_image_url ?? null,
             productName: l.product_name ?? null,
+            productDeliveredDate: l.product_delivered_date ?? null,
+            productDeliveryStatus: l.product_delivery_status ?? null,
           } as LoanApplication;
         });
         setLoans(rows);
@@ -495,6 +499,7 @@ const PaymentTracker: React.FC = () => {
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Tenure</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Paid / Total EMI</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Remaining</th>
+                  <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Product Delivered Date</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Status</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Progress</th>
                   <th className="text-left py-4 px-6 text-sm font-semibold text-slate-700 dark:text-white">Actions</th>
@@ -526,6 +531,18 @@ const PaymentTracker: React.FC = () => {
                       </td>
                       <td className="py-4 px-6">
                         <span className="font-medium text-slate-800 dark:text-white">₹{loan.remainingAmount.toLocaleString('en-IN')}</span>
+                      </td>
+                      <td className="py-4 px-6">
+                        {loan.productDeliveredDate ? (
+                          <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                            <CheckCircle size={14} />
+                            {new Date(loan.productDeliveredDate).toLocaleDateString('en-IN')}
+                          </span>
+                        ) : (
+                          <span className="inline-flex px-3 py-1.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">
+                            Pending
+                          </span>
+                        )}
                       </td>
                       <td className="py-4 px-6">
                         <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${getStatusColor(loan.status)}`}>
@@ -616,6 +633,8 @@ const PaymentTracker: React.FC = () => {
             tenure: selectedLoan.tenure,
             emiAmount: selectedLoan.emiAmount,
             disbursedDate: selectedLoan.disbursedDate,
+            productDeliveredDate: selectedLoan.productDeliveredDate || undefined,
+            productDeliveryStatus: selectedLoan.productDeliveryStatus || undefined,
             createdAt: selectedLoan.createdAt
           } as TrackerLoan}
           onClose={() => setSelectedLoan(null)}

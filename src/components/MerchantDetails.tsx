@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Users, X, Eye } from 'lucide-react';
+import { Users, X, Eye, Filter } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 type MerchantProfile = {
@@ -26,6 +26,7 @@ type MerchantRow = {
   email: string;
   created_at: string;
   profile?: MerchantProfile | null;
+  tiedUpNbfcs?: string[]; // NBFC names tied to this merchant
 };
 
 export default function MerchantDetails() {
@@ -33,6 +34,9 @@ export default function MerchantDetails() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<MerchantRow | null>(null);
   const [search, setSearch] = useState('');
+  const [showOnlyTiedUp, setShowOnlyTiedUp] = useState(false);
+  const [selectedNbfc, setSelectedNbfc] = useState<string | null>(null);
+  const [allNbfcs, setAllNbfcs] = useState<string[]>([]);
   const genCode = (biz?: string, location?: string, seed?: string) => {
     const slug = (s?: string) => (s || '').replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase().padEnd(3, 'X');
     let h = 0; for (let i = 0; i < (seed || '').length; i++) h = (h * 31 + (seed as string).charCodeAt(i)) >>> 0;
@@ -89,6 +93,33 @@ export default function MerchantDetails() {
         .order('created_at', { ascending: false });
 
       if (!pfErr && profileFirst && profileFirst.length > 0) {
+        // Fetch all tie-up data
+        const { data: allTieups } = await supabase
+          .from('nbfc_tieup_requests')
+          .select('merchant_id, nbfc_id')
+          .in('merchant_id', profileFirst.map(p => p.merchant_id));
+        
+        // Fetch NBFC names
+        const nbfcIds = allTieups?.map(t => t.nbfc_id) || [];
+        const { data: nbfcProfiles } = nbfcIds.length > 0 ? await supabase
+          .from('user_profiles')
+          .select('id, username')
+          .in('id', nbfcIds) : { data: [] };
+        
+        const nbfcMap = new Map<string, string>();
+        nbfcProfiles?.forEach(n => {
+          nbfcMap.set(n.id, n.username);
+        });
+        
+        const tieupMap = new Map<string, string[]>();
+        allTieups?.forEach(t => {
+          const nbfcName = nbfcMap.get(t.nbfc_id) || 'Unknown NBFC';
+          if (!tieupMap.has(t.merchant_id)) {
+            tieupMap.set(t.merchant_id, []);
+          }
+          tieupMap.get(t.merchant_id)?.push(nbfcName);
+        });
+
         const mappedA: MerchantRow[] = profileFirst.map((row: any) => ({
           id: row.user?.id || row.merchant_id,
           username: row.user?.username || '-',
@@ -111,8 +142,13 @@ export default function MerchantDetails() {
             ifsc_code: row.ifsc_code,
             upi_id: row.upi_id,
           },
+          tiedUpNbfcs: tieupMap.get(row.merchant_id) || [],
         }));
         setRows(mappedA);
+        
+        // Extract unique NBFC names
+        const uniqueNbfcs = Array.from(new Set(Array.from(tieupMap.values()).flat())).sort();
+        setAllNbfcs(uniqueNbfcs);
         return;
       }
 
@@ -124,32 +160,94 @@ export default function MerchantDetails() {
         .order('created_at', { ascending: false });
 
       if (!error && data) {
+        // Fetch tie-up data for strategy B
+        const merchantIds = data.map((u: any) => u.id);
+        const { data: allTieups } = await supabase
+          .from('nbfc_tieup_requests')
+          .select('merchant_id, nbfc_id')
+          .in('merchant_id', merchantIds);
+        
+        // Fetch NBFC names
+        const nbfcIds = allTieups?.map(t => t.nbfc_id) || [];
+        const { data: nbfcProfiles } = nbfcIds.length > 0 ? await supabase
+          .from('user_profiles')
+          .select('id, username')
+          .in('id', nbfcIds) : { data: [] };
+        
+        const nbfcMap = new Map<string, string>();
+        nbfcProfiles?.forEach(n => {
+          nbfcMap.set(n.id, n.username);
+        });
+        
+        const tieupMap = new Map<string, string[]>();
+        allTieups?.forEach(t => {
+          const nbfcName = nbfcMap.get(t.nbfc_id) || 'Unknown NBFC';
+          if (!tieupMap.has(t.merchant_id)) {
+            tieupMap.set(t.merchant_id, []);
+          }
+          tieupMap.get(t.merchant_id)?.push(nbfcName);
+        });
+
         const mapped: MerchantRow[] = data.map((u: any) => ({
           id: u.id,
           username: u.username,
           email: u.email,
           created_at: u.created_at,
           profile: u.merchant_profiles || null,
+          tiedUpNbfcs: tieupMap.get(u.id) || [],
         }));
         setRows(mapped);
+        
+        // Extract unique NBFC names
+        const uniqueNbfcs = Array.from(new Set(Array.from(tieupMap.values()).flat())).sort();
+        setAllNbfcs(uniqueNbfcs);
         return;
       }
 
       // Fallback: fetch separately and merge on id
-      const [usersRes, profRes] = await Promise.all([
+      const [usersRes, profRes, tieupRes] = await Promise.all([
         supabase.from('user_profiles').select('id,username,email,created_at').eq('role', 'merchant'),
         supabase.from('merchant_profiles').select('*'),
+        supabase.from('nbfc_tieup_requests').select('merchant_id, nbfc_id'),
       ]);
       const users = usersRes.data || [];
       const profs = (profRes.data || []) as MerchantProfile[];
+      
+      // Fetch NBFC names
+      const nbfcIds = tieupRes.data?.map(t => t.nbfc_id) || [];
+      const { data: nbfcProfiles } = nbfcIds.length > 0 ? await supabase
+        .from('user_profiles')
+        .select('id, username')
+        .in('id', nbfcIds) : { data: [] };
+      
+      const nbfcMap = new Map<string, string>();
+      nbfcProfiles?.forEach(n => {
+        nbfcMap.set(n.id, n.username);
+      });
+      
+      const tieupMap = new Map<string, string[]>();
+      tieupRes.data?.forEach(t => {
+        const nbfcName = nbfcMap.get(t.nbfc_id) || 'Unknown NBFC';
+        if (!tieupMap.has(t.merchant_id)) {
+          tieupMap.set(t.merchant_id, []);
+        }
+        tieupMap.get(t.merchant_id)?.push(nbfcName);
+      });
+
       const mapped: MerchantRow[] = users.map((u: any) => ({
         id: u.id,
         username: u.username,
         email: u.email,
         created_at: u.created_at,
         profile: profs.find((p) => p.merchant_id === u.id) || null,
+        tiedUpNbfcs: tieupMap.get(u.id) || [],
       }));
+      
       setRows(mapped);
+      
+      // Extract unique NBFC names
+      const uniqueNbfcs = Array.from(new Set(Array.from(tieupMap.values()).flat())).sort();
+      setAllNbfcs(uniqueNbfcs);
     } catch (error) {
       console.error('Error fetching merchants:', error);
     } finally {
@@ -159,8 +257,21 @@ export default function MerchantDetails() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) => {
+    
+    // Filter by tie-up status if enabled
+    let baseList = rows;
+    if (showOnlyTiedUp) {
+      baseList = rows.filter(r => r.tiedUpNbfcs && r.tiedUpNbfcs.length > 0);
+    }
+    
+    // Filter by specific NBFC if selected
+    if (selectedNbfc) {
+      baseList = baseList.filter(r => r.tiedUpNbfcs && r.tiedUpNbfcs.includes(selectedNbfc));
+    }
+    
+    // Filter by search query
+    if (!q) return baseList;
+    return baseList.filter((r) => {
       const hay = [
         r.profile?.owner_name,
         r.profile?.business_name,
@@ -169,13 +280,14 @@ export default function MerchantDetails() {
         r.profile?.address,
         r.username,
         r.id,
+        ...(r.tiedUpNbfcs || []),
       ]
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [rows, search]);
+  }, [rows, search, showOnlyTiedUp, selectedNbfc]);
 
   if (loading) {
     return (
@@ -197,9 +309,35 @@ export default function MerchantDetails() {
 
   return (
     <div className="space-y-6">
-      {/* Search */}
+      {/* Search & Filter */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowOnlyTiedUp(!showOnlyTiedUp)}
+            className={`inline-flex items-center gap-2 px-3 py-2 rounded transition-colors ${
+              showOnlyTiedUp
+                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600'
+            }`}
+          >
+            <Filter size={16} />
+            {showOnlyTiedUp ? 'Tied-up Only' : 'All Merchants'}
+          </button>
+          
+          {/* NBFC Filter Dropdown */}
+          <select
+            value={selectedNbfc || ''}
+            onChange={(e) => setSelectedNbfc(e.target.value || null)}
+            className="px-3 py-2 rounded border bg-white dark:bg-gray-800 dark:border-gray-700 text-sm text-gray-900 dark:text-white"
+          >
+            <option value="">All NBFCs</option>
+            {allNbfcs.map((nbfc) => (
+              <option key={nbfc} value={nbfc}>
+                {nbfc}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="flex items-center gap-2">
           <input
             type="text"
@@ -220,6 +358,7 @@ export default function MerchantDetails() {
                 <th className="px-6 py-3 text-left text-sm font-semibold">Business Name</th>
                 <th className="px-6 py-3 text-left text-sm font-semibold">Phone</th>
                 <th className="px-6 py-3 text-left text-sm font-semibold">Address</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold">Tied-up NBFCs</th>
                 <th className="px-6 py-3 text-left text-sm font-semibold">Actions</th>
               </tr>
             </thead>
@@ -230,6 +369,19 @@ export default function MerchantDetails() {
                   <td className="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">{r.profile?.business_name || '-'}</td>
                   <td className="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">{r.profile?.phone || '-'}</td>
                   <td className="px-6 py-3 text-sm text-gray-700 dark:text-gray-300 truncate max-w-xs">{r.profile?.address || '-'}</td>
+                  <td className="px-6 py-3 text-sm">
+                    {r.tiedUpNbfcs && r.tiedUpNbfcs.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {r.tiedUpNbfcs.map((nbfc, idx) => (
+                          <span key={idx} className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs">
+                            {nbfc}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-gray-500 dark:text-gray-400">No tie-ups</span>
+                    )}
+                  </td>
                   <td className="px-6 py-3">
                     <button
                       onClick={() => setSelected(r)}
@@ -243,7 +395,7 @@ export default function MerchantDetails() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-6 text-center text-sm text-gray-500 dark:text-gray-400">No results</td>
+                  <td colSpan={6} className="px-6 py-6 text-center text-sm text-gray-500 dark:text-gray-400">No results</td>
                 </tr>
               )}
             </tbody>

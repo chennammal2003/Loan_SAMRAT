@@ -14,7 +14,7 @@ export function UserDetailsModal({ user, additionalDetails, onClose }: UserDetai
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
       <div className="relative max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-900">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 dark:border-gray-700">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b bordevb r-gray-200 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 dark:border-gray-700">
           <h2 className="text-2xl font-bold text-white">User Details</h2>
           <button
             onClick={onClose}

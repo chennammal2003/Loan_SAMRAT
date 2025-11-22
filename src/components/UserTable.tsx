@@ -1,5 +1,6 @@
 import { UserProfile } from '../types';
-import { Phone, Calendar, ToggleLeft, ToggleRight, Eye } from 'lucide-react';
+import { Phone, Calendar, ToggleLeft, ToggleRight, Eye, CheckCircle, XCircle } from 'lucide-react';
+import { useState } from 'react';
 
 interface UserTableProps {
   users: UserProfile[];
@@ -8,6 +9,8 @@ interface UserTableProps {
 }
 
 export function UserTable({ users, onViewDetails, onToggleStatus }: UserTableProps) {
+  const [statusModalUser, setStatusModalUser] = useState<UserProfile | null>(null);
+  const [isApproving, setIsApproving] = useState(false);
   const getRoleBadge = (role: string) => {
     const styles = {
       nbfc_admin: 'bg-purple-100 text-purple-700 border-purple-200',
@@ -23,6 +26,21 @@ export function UserTable({ users, onViewDetails, onToggleStatus }: UserTablePro
         {role.replace('_', ' ').toUpperCase()}
       </span>
     );
+  };
+
+  const handleApprove = async () => {
+    if (!statusModalUser) return;
+    setIsApproving(true);
+    try {
+      await onToggleStatus(statusModalUser.id, !!statusModalUser.is_active);
+      setStatusModalUser(null);
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  const handleReject = () => {
+    setStatusModalUser(null);
   };
 
   return (
@@ -98,9 +116,17 @@ export function UserTable({ users, onViewDetails, onToggleStatus }: UserTablePro
                 </td>
                 <td className="px-6 py-4">
                   <button
-                    onClick={() => onToggleStatus(user.id, !!user.is_active)}
-                    className="group flex items-center"
-                  >
+                    onClick={() => {
+                      // Only show modal for merchants and admins that need approval
+                      if ((user.role === 'merchant' || user.role === 'admin' || user.role === 'nbfc_admin')) {
+                        setStatusModalUser(user);
+                      } else {
+                        // For other users, just toggle directly
+                        onToggleStatus(user.id, !!user.is_active);
+                      }
+                    }}
+                    className="group flex items-center cursor-pointer hover:opacity-80 transition-opacity"
+                  >      
                     {user.is_active ? (
                       <>
                         <ToggleRight className="mr-2 h-6 w-6 text-green-500 transition-transform group-hover:scale-110" />
@@ -146,6 +172,53 @@ export function UserTable({ users, onViewDetails, onToggleStatus }: UserTablePro
           </tbody>
         </table>
       </div>
+
+      {/* Approve/Reject Modal */}
+      {statusModalUser && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => !isApproving && setStatusModalUser(null)}
+        >
+          <div
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-center w-12 h-12 mx-auto bg-blue-100 dark:bg-blue-900/30 rounded-full mb-4">
+              <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            
+            <h3 className="text-lg font-semibold text-center text-gray-900 dark:text-white mb-2">
+              Approve {statusModalUser.full_name || statusModalUser.username}?
+            </h3>
+            
+            <p className="text-sm text-gray-600 dark:text-gray-300 text-center mb-6">
+              {statusModalUser.role === 'merchant' ? 'Merchant' : statusModalUser.role === 'nbfc_admin' || statusModalUser.role === 'admin' ? 'NBFC Admin' : 'User'} will be {statusModalUser.is_active ? 'deactivated' : 'approved'} and can access all features.
+            </p>
+
+            <div className="space-y-3">
+              <button
+                onClick={handleApprove}
+                disabled={isApproving}
+                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                <CheckCircle className="w-5 h-5" />
+                {isApproving ? 'Processing...' : 'Approve'}
+              </button>
+              
+              <button
+                onClick={handleReject}
+                disabled={isApproving}
+                className="w-full bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 disabled:bg-gray-400 text-gray-800 dark:text-gray-100 font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                <XCircle className="w-5 h-5" />
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

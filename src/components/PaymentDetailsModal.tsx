@@ -11,6 +11,8 @@ export type TrackerLoan = {
   tenure: number; // in months
   emiAmount: number;
   disbursedDate: string;
+  productDeliveredDate?: string; // NEW: Product delivery date for EMI start
+  productDeliveryStatus?: string; // NEW: Status of product delivery (Pending/Delivered)
   createdAt?: string;
 };
 
@@ -19,6 +21,9 @@ type PaymentRow = {
   dueDateStr: string;
   amount: number;
   status: 'Pending' | 'Paid' | 'ECS Success' | 'ECS Bounce' | 'Due Missed';
+  paidDate?: string; // Format: YYYY-MM-DD
+  paymentMethod?: 'pending' | 'manual' | 'ecs' | 'ecs_bounce' | 'missed'; // NEW: Track how payment was made
+  paidByUserId?: string; // NEW: Track who marked it paid
 };
 
 interface PaymentDetailsModalProps {
@@ -33,6 +38,8 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadO
   const [rows, setRows] = useState<PaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionModalIndex, setActionModalIndex] = useState<number | null>(null);
+  const [actionModalPaidDate, setActionModalPaidDate] = useState<string>('');
 
   // Determine if editing should be allowed based on user role and prop
   const isAdmin = profile?.role === 'admin';
@@ -51,10 +58,23 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadO
 
   const schedule = useMemo(() => {
     const result: { monthLabel: string; dueDate: Date }[] = [];
-    const start = loan.disbursedDate ? new Date(loan.disbursedDate) : new Date();
+    
+    // CRITICAL: Use product delivery date if available, otherwise use disbursed date
+    // This ensures EMI starts counting from actual product delivery, not just disbursement
+    let startDate = loan.disbursedDate ? new Date(loan.disbursedDate) : new Date();
+    
+    if (loan.productDeliveredDate && loan.productDeliveryStatus !== 'Pending') {
+      // Product has been delivered, use delivery date as EMI start date
+      startDate = new Date(loan.productDeliveredDate);
+    } else if (loan.productDeliveredDate && !loan.productDeliveryStatus) {
+      // If delivery date exists but status is not set, use delivery date
+      startDate = new Date(loan.productDeliveredDate);
+    }
+    // else: Product not yet delivered, use disbursement date
+    
     // Use the day of the start date for all monthly dues
-    const dueDay = start.getDate();
-    const base = new Date(start.getFullYear(), start.getMonth(), dueDay);
+    const dueDay = startDate.getDate();
+    const base = new Date(startDate.getFullYear(), startDate.getMonth(), dueDay);
     for (let i = 0; i < loan.tenure; i++) {
       // Construct date keeping same day; adjust for months with fewer days
       const y = base.getFullYear();
@@ -68,7 +88,7 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadO
       });
     }
     return result;
-  }, [loan.disbursedDate, loan.tenure]);
+  }, [loan.disbursedDate, loan.productDeliveredDate, loan.productDeliveryStatus, loan.tenure]);
 
   useEffect(() => {
     const fetchPayments = async () => {
@@ -137,34 +157,81 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadO
   }, [loan.id, computedEmi, schedule]);
 
   const setRowStatus = async (i: number, status: PaymentRow['status']) => {
+    const currentRow = rows[i];
+    const oldStatus = currentRow.status;
+    const oldPaymentMethod = currentRow.paymentMethod;
+
+    // PROTECTION 1: Cannot override manually paid EMIs
+    if (oldPaymentMethod === 'manual' && currentRow.paidDate) {
+      alert('❌ Cannot change status: This EMI was manually marked as paid on ' + 
+            new Date(currentRow.paidDate).toLocaleDateString('en-IN') + 
+            '.\n\nTo change it, you must first clear the payment record.');
+      // Revert UI
+      setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, status: oldStatus } : r)));
+      return;
+    }
+
+    // PROTECTION 2: Cannot override ECS Success EMIs
+    if (oldPaymentMethod === 'ecs' && oldStatus === 'ECS Success') {
+      alert('❌ Cannot change status: This EMI was processed by ECS system.\n\n' +
+            'Only ECS system can modify this record.');
+      // Revert UI
+      setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, status: oldStatus } : r)));
+      return;
+    }
+
+    // PROTECTION 3: Cannot change Due Missed status manually
+    if (oldStatus === 'Due Missed') {
+      alert('❌ Cannot change status: This EMI is marked as due missed.\n\n' +
+            'Please contact system administrator to override.');
+      // Revert UI
+      setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, status: oldStatus } : r)));
+      return;
+    }
+
     // Update UI immediately for responsiveness
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, status } : r)));
 
-    // Get the current status of this EMI before the change for logging
-    const { data: currentEmiData } = await supabase
-      .from('emi_statuses')
-      .select('status')
-      .eq('loan_id', loan.id)
-      .eq('installment_index', i)
-      .single();
-
-    const oldStatus = currentEmiData?.status as PaymentRow['status'] || 'Pending';
+    // Determine new payment method based on status
+    let newPaymentMethod = oldPaymentMethod || 'pending';
+    if (status === 'ECS Success') {
+      newPaymentMethod = 'ecs';
+    } else if (status === 'ECS Bounce') {
+      newPaymentMethod = 'ecs_bounce';
+    } else if (status === 'Due Missed') {
+      newPaymentMethod = 'missed';
+    } else if (status === 'Pending') {
+      newPaymentMethod = 'pending';
+    }
+    // Note: 'Paid' through dropdown should not be set directly; use "Mark Paid" button instead
 
     try {
       let newPaidAmountComputed: number | null = null;
       let newLoanStatusComputed: 'ontrack' | 'overdue' | 'paid' | 'bounce' | 'ecs_success' | null = null;
       let paymentsCompletedComputed: number | null = null;
-      // 1. First, save EMI status to database
+      // 1. First, save EMI status to database WITH payment method
       await new Promise<void>((resolve, reject) => {
         const upsert = async () => {
           try {
             const { error } = await supabase.from('emi_statuses').upsert(
-              [{ loan_id: loan.id, installment_index: i, status, updated_at: new Date().toISOString() }],
+              [{ 
+                loan_id: loan.id, 
+                installment_index: i, 
+                status, 
+                payment_method: newPaymentMethod, // NEW: Track payment method
+                updated_at: new Date().toISOString() 
+              }],
               { onConflict: 'loan_id,installment_index' } as any
             );
             if (error) {
               // If upsert with onConflict not supported, try plain upsert without option
-              await supabase.from('emi_statuses').upsert({ loan_id: loan.id, installment_index: i, status, updated_at: new Date().toISOString() });
+              await supabase.from('emi_statuses').upsert({ 
+                loan_id: loan.id, 
+                installment_index: i, 
+                status, 
+                payment_method: newPaymentMethod, // NEW
+                updated_at: new Date().toISOString() 
+              });
             }
             resolve();
           } catch (err) {
@@ -286,8 +353,8 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadO
 
         const dueInfo = schedule[i];
         const note = dueInfo
-          ? `Month: ${dueInfo.monthLabel}, Due: ${dueInfo.dueDate.toLocaleDateString('en-IN')}, EMI: ${emiAmount}`
-          : `EMI: ${emiAmount}`;
+          ? `Month: ${dueInfo.monthLabel}, Due: ${dueInfo.dueDate.toLocaleDateString('en-IN')}, EMI: ${emiAmount}, Payment Method: ${newPaymentMethod}`
+          : `EMI: ${emiAmount}, Payment Method: ${newPaymentMethod}`;
 
         await supabase.from('emi_status_audit').insert({
           loan_id: loan.id,
@@ -323,6 +390,136 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadO
       console.error('❌ Error saving EMI status change:', error);
       // Revert UI change on error
       setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, status: status } : r)));
+    }
+  };
+
+  // NEW: Helper to determine if EMI is locked for editing
+  const isEmiLocked = (row: PaymentRow): boolean => {
+    // Locked if manually paid with date
+    if (row.paymentMethod === 'manual' && row.paidDate) {
+      return true;
+    }
+    // Locked if ECS success
+    if (row.paymentMethod === 'ecs' && row.status === 'ECS Success') {
+      return true;
+    }
+    // Locked if due missed
+    if (row.status === 'Due Missed') {
+      return true;
+    }
+    return false;
+  };
+
+  const handleSavePaidDate = async (installmentIndex: number, paidDate: string) => {
+    if (!paidDate) {
+      alert('Please enter a paid date');
+      return;
+    }
+    
+    const currentRow = rows[installmentIndex];
+    
+    // PROTECTION: Cannot override ECS processed EMIs
+    if (currentRow.paymentMethod === 'ecs' && currentRow.status === 'ECS Success') {
+      alert('❌ Cannot mark as paid: This EMI was already processed by ECS system as ' + 
+            currentRow.status + '.\n\n' +
+            'Only ECS system can modify this record.');
+      return;
+    }
+
+    try {
+      // NEW: Set payment method to 'manual'
+      const newPaymentMethod = 'manual';
+
+      // Update the row with the paid date and payment method
+      setRows((prev) => prev.map((r, idx) => 
+        idx === installmentIndex 
+          ? { 
+              ...r, 
+              status: 'Paid', 
+              paidDate,
+              paymentMethod: newPaymentMethod, // NEW
+              paidByUserId: profile?.id // NEW
+            } 
+          : r
+      ));
+
+      // Save to emi_statuses table with payment method
+      await supabase.from('emi_statuses').upsert({
+        loan_id: loan.id,
+        installment_index: installmentIndex,
+        status: 'Paid',
+        payment_method: newPaymentMethod, // NEW
+        paid_date: paidDate,
+        paid_by_user_id: profile?.id, // NEW: Track who marked it paid
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'loan_id,installment_index' } as any);
+
+      // Get the current EMI status to determine if it was paid before
+      const { data: currentEmiData } = await supabase
+        .from('emi_statuses')
+        .select('status')
+        .eq('loan_id', loan.id)
+        .eq('installment_index', installmentIndex)
+        .single();
+
+      const oldStatus = currentEmiData?.status as PaymentRow['status'] || 'Pending';
+
+      // Update paid_amount in loans table
+      const { data: loanData } = await supabase
+        .from('loans')
+        .select('paid_amount')
+        .eq('id', loan.id)
+        .single();
+
+      const currentPaidAmount = Number(loanData?.paid_amount || 0);
+      const emiAmount = computedEmi;
+      let newPaidAmount = currentPaidAmount;
+
+      const isOldPaid = oldStatus === 'Paid' || oldStatus === 'ECS Success';
+      if (!isOldPaid) {
+        newPaidAmount += emiAmount;
+      }
+
+      await supabase.from('loans').update({ paid_amount: newPaidAmount }).eq('id', loan.id);
+
+      // Update overall loan status
+      const { data: allStatuses } = await supabase
+        .from('emi_statuses')
+        .select('status')
+        .eq('loan_id', loan.id);
+
+      const statuses = (allStatuses || []).map(s => s.status);
+      const paidCount = statuses.filter(s => s === 'Paid').length;
+      const ecsSuccessCount = statuses.filter(s => s === 'ECS Success').length;
+      const bounceCount = statuses.filter(s => s === 'ECS Bounce').length;
+      const overdueCount = statuses.filter(s => s === 'Due Missed').length;
+
+      let newLoanStatus = 'ontrack';
+      if (bounceCount > 0) newLoanStatus = 'bounce';
+      else if (overdueCount > 0) newLoanStatus = 'overdue';
+      else if (ecsSuccessCount === loan.tenure) newLoanStatus = 'ecs_success';
+      else if (paidCount === loan.tenure) newLoanStatus = 'paid';
+      else if (paidCount + ecsSuccessCount === loan.tenure) newLoanStatus = 'paid';
+      else if (paidCount + ecsSuccessCount > 0) newLoanStatus = 'ontrack';
+
+      await supabase.from('loans').update({ status: newLoanStatus }).eq('id', loan.id);
+
+      // Notify parent
+      if (onUpdated) {
+        onUpdated({
+          loanId: loan.id,
+          paidAmount: newPaidAmount,
+          paymentsCompleted: paidCount + ecsSuccessCount,
+          status: newLoanStatus as any,
+        });
+      }
+
+      setActionModalIndex(null);
+      setActionModalPaidDate('');
+      alert('Paid date saved successfully!');
+    } catch (error) {
+      console.error('Error saving paid date:', error);
+      alert('Failed to save paid date');
     }
   };
 
@@ -368,6 +565,7 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadO
                   <th className="text-left px-6 py-3 text-sm font-semibold">Amount</th>
                   <th className="text-left px-6 py-3 text-sm font-semibold">Current Status</th>
                   {!readOnly && <th className="text-left px-6 py-3 text-sm font-semibold">Update</th>}
+                  {!readOnly && <th className="text-left px-6 py-3 text-sm font-semibold">View Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">
@@ -388,7 +586,7 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadO
                     <td className="px-6 py-4">₹{r.amount.toLocaleString('en-IN')}</td>
                     <td className="px-6 py-4">
                       {r.status === 'Paid' && (
-                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-900/40 text-green-300 border border-green-800">Paid</span>
+                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-900/40 text-green-300 border border-green-800">Paid {r.paidDate && `(${new Date(r.paidDate).toLocaleDateString('en-IN')})`}</span>
                       )}
                       {r.status === 'ECS Success' && (
                         <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-900/40 text-emerald-300 border border-emerald-800">ECS Success</span>
@@ -404,22 +602,43 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadO
                       )}
                     </td>
                     {!readOnly && (
-                      <td className="px-6 py-4">
-                        <select
-                          value={r.status}
-                          onChange={async (e) => {
-                            const newStatus = e.target.value as PaymentRow['status'];
-                            await setRowStatus(i, newStatus);
-                          }}
-                          className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm"
-                        >
-                          <option>Pending</option>
-                          <option>Paid</option>
-                          <option>ECS Success</option>
-                          <option>ECS Bounce</option>
-                          <option>Due Missed</option>
-                        </select>
-                      </td>
+                      <>
+                        <td className="px-6 py-4">
+                          <select
+                            value={r.status}
+                            onChange={async (e) => {
+                              const newStatus = e.target.value as PaymentRow['status'];
+                              await setRowStatus(i, newStatus);
+                            }}
+                            disabled={isEmiLocked(r)} // NEW: Disable if EMI is locked
+                            className={`bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm ${
+                              isEmiLocked(r) ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
+                          >
+                            <option>Pending</option>
+                            <option>Paid</option>
+                            <option>ECS Success</option>
+                            <option>ECS Bounce</option>
+                            <option>Due Missed</option>
+                          </select>
+                        </td>
+                        <td className="px-6 py-4">
+                          <button
+                            onClick={() => {
+                              setActionModalIndex(i);
+                              setActionModalPaidDate(r.paidDate || '');
+                            }}
+                            disabled={r.status === 'Paid' || r.status === 'ECS Success' || r.status === 'Due Missed'} // NEW: Disable if already paid via other method
+                            className={`px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white ${
+                              r.status === 'Paid' || r.status === 'ECS Success' || r.status === 'Due Missed'
+                                ? 'opacity-50 cursor-not-allowed'
+                                : 'hover:bg-blue-700'
+                            } transition-colors`}
+                          >
+                            Mark Paid
+                          </button>
+                        </td>
+                      </>
                     )}
                   </tr>
                 ))}
@@ -428,6 +647,68 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadO
           </div>
         </div>
       </div>
+
+      {/* Action Modal - Mark as Paid with Date */}
+      {actionModalIndex !== null && (
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center p-4"
+          style={{ zIndex: 1001 }}
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setActionModalIndex(null);
+              setActionModalPaidDate('');
+            }
+          }}
+        >
+          <div className="bg-gray-900 text-gray-100 rounded-xl shadow-2xl border border-gray-700 max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold mb-4">Mark EMI as Paid</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  EMI: <span className="font-bold">{rows[actionModalIndex]?.monthLabel}</span> (Due: {rows[actionModalIndex]?.dueDateStr})
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Enter Paid Date:</label>
+                <input
+                  type="date"
+                  value={actionModalPaidDate}
+                  onChange={(e) => setActionModalPaidDate(e.target.value)}
+                  max={new Date().toISOString().split('T')[0]} // Can't select future dates
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                />
+                <p className="text-xs text-gray-400 mt-1">Select the date when the EMI was paid</p>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => {
+                    setActionModalIndex(null);
+                    setActionModalPaidDate('');
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-700 text-gray-100 rounded-lg hover:bg-gray-600 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (actionModalIndex !== null) {
+                      handleSavePaidDate(actionModalIndex, actionModalPaidDate);
+                    }
+                  }}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                >
+                  Save & Mark Paid
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -35,7 +35,8 @@ export default function LoanDetailsStep({ formData, setFormData, errors, setErro
     purity: string;
     price: number;
     stock_quantity: number;
-  }>(null);
+  } | null>(null);
+  const [imageLoaded, setImageLoaded] = useState<{ [key: string]: boolean }>({});
   // NBFC terms (from admin tie-up)
   const [nbfcTerms, setNbfcTerms] = useState<{ interest_rate?: number | null; default_tenure?: number | null; processing_fee?: number | null; processing_fee_percent?: number | null; tenure_options?: number[] | null } | null>(null);
 
@@ -207,7 +208,7 @@ export default function LoanDetailsStep({ formData, setFormData, errors, setErro
                             const exists = (prev.selectedProducts || []).some(sp => sp.id === p.id);
                             const next = exists
                               ? (prev.selectedProducts || []).filter(sp => sp.id !== p.id)
-                              : [...(prev.selectedProducts || []), { id: p.id, name: p.name, price: p.price }];
+                              : [...(prev.selectedProducts || []), { id: p.id, name: p.name, price: p.price, image_url: p.image_url }];
                             return { ...prev, selectedProducts: next };
                           });
                         }}
@@ -411,11 +412,21 @@ export default function LoanDetailsStep({ formData, setFormData, errors, setErro
             <button className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setViewProduct(null)}>✕</button>
           </div>
           <div className="p-4 space-y-4">
-            <div className="w-full aspect-video bg-gray-50 dark:bg-gray-900 rounded overflow-hidden">
+            <div className="w-full aspect-video bg-gray-50 dark:bg-gray-900 rounded overflow-hidden flex items-center justify-center">
               {viewProduct!.image_url ? (
-                <img src={viewProduct!.image_url} alt={viewProduct!.name} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>
+                <img 
+                  src={viewProduct!.image_url} 
+                  alt={viewProduct!.name} 
+                  className="w-full h-full object-cover"
+                  onLoad={() => setImageLoaded(prev => ({ ...prev, [viewProduct!.id]: true }))}
+                  onError={() => setImageLoaded(prev => ({ ...prev, [viewProduct!.id]: false }))}
+                />
+              ) : null}
+              {!imageLoaded[viewProduct!.id] && (
+                <div className="text-gray-400 text-center">
+                  <div>No Image Available</div>
+                  <div className="text-xs mt-1">Product ID: {viewProduct!.id}</div>
+                </div>
               )}
             </div>
             <div className="text-sm text-gray-700 dark:text-gray-300 space-y-1">
@@ -438,7 +449,7 @@ export default function LoanDetailsStep({ formData, setFormData, errors, setErro
                   const exists = (prev.selectedProducts || []).some(sp => sp.id === viewProduct!.id);
                   const next = exists
                     ? prev.selectedProducts
-                    : [...(prev.selectedProducts || []), { id: viewProduct!.id, name: viewProduct!.name, price: viewProduct!.price }];
+                    : [...(prev.selectedProducts || []), { id: viewProduct!.id, name: viewProduct!.name, price: viewProduct!.price, image_url: viewProduct!.image_url }];
                   return { ...prev, selectedProducts: next };
                 });
                 setViewProduct(null);

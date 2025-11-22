@@ -7,6 +7,7 @@ import PersonalDetailsStep from './loan-steps/PersonalDetailsStep';
 import ContactAddressStep from './loan-steps/ContactAddressStep';
 import ReferencesStep from './loan-steps/ReferencesStep';
 import DocumentsStep from './loan-steps/DocumentsStep';
+import ReferralCodeStep from './loan-steps/ReferralCodeStep';
 import DeclarationStep from './loan-steps/DeclarationStep';
 
 interface ApplyLoanModalProps {
@@ -24,7 +25,7 @@ export interface LoanFormData {
   tenure: string;
   processingFee: number;
   gstAccepted: boolean;
-  selectedProducts: { id: string; name: string; price: number }[];
+  selectedProducts: { id: string; name: string; price: number; image_url?: string }[];
 
   firstName: string;
   lastName: string;
@@ -62,6 +63,7 @@ export interface LoanFormData {
   photo: File | null;
 
   declarationAccepted: boolean;
+  referralCode: string;
 }
 
 const initialFormData: LoanFormData = {
@@ -112,6 +114,7 @@ const initialFormData: LoanFormData = {
   photo: null,
 
   declarationAccepted: false,
+  referralCode: '',
 };
 
 export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalProps) {
@@ -123,7 +126,7 @@ export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalPro
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const totalSteps = 6;
+  const totalSteps = 7;
 
   const steps = [
     { number: 1, title: 'Loan Details', component: LoanDetailsStep },
@@ -131,7 +134,8 @@ export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalPro
     { number: 3, title: 'Contact & Address', component: ContactAddressStep },
     { number: 4, title: 'References', component: ReferencesStep },
     { number: 5, title: 'Documents', component: DocumentsStep },
-    { number: 6, title: 'Declaration', component: DeclarationStep },
+    { number: 6, title: 'Referral Code', component: ReferralCodeStep },
+    { number: 7, title: 'Declaration', component: DeclarationStep },
   ];
 
   const CurrentStepComponent = steps[currentStep - 1].component;
@@ -239,6 +243,9 @@ export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalPro
       });
     }
     if (step === 6) {
+      // Referral Code is optional - no validation needed
+    }
+    if (step === 7) {
       if (!formData.declarationAccepted) e.declarationAccepted = 'Please accept declaration';
     }
     return e;
@@ -383,109 +390,71 @@ export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalPro
         const downPaymentAmount = formData.downPaymentAmount ? parseFloat(formData.downPaymentAmount) : 0;
         const safeDownPaymentAmount = Number.isFinite(downPaymentAmount) && downPaymentAmount > 0 ? downPaymentAmount : 0;
         const downPaymentPercentage = totalProductAmount > 0 ? (safeDownPaymentAmount / totalProductAmount) * 100 : 0;
-        const { data: loanData, error: loanError } = await supabase
-          .from('loans')
+
+        // 2) Insert only to product_loans table (single source of truth)
+        let productLoanId: string | null = null;
+        const primaryProduct = (formData.selectedProducts || [])[0] || null;
+        const { data: productLoan, error: productLoanErr } = await supabase
+          .from('product_loans')
           .insert({
             user_id: profile.id,
             first_name: formData.firstName,
             last_name: formData.lastName,
-            father_mother_spouse_name: formData.fatherMotherSpouseName,
-            date_of_birth: formData.dateOfBirth,
-            aadhaar_number: formData.aadhaarNumber,
-            pan_number: formData.panNumber,
-            gender: formData.gender,
-            marital_status: formData.maritalStatus,
-            occupation: formData.occupation === 'Others' ? formData.occupationOther : formData.occupation,
-            introduced_by: formData.introducedBy,
             email_id: formData.emailId,
+            mobile_primary: formData.mobilePrimary,
+            mobile_alternative: formData.mobileAlternative || null,
             address: formData.address,
             pin_code: formData.pinCode,
-            landmark: formData.landmark,
-            permanent_address: formData.permanentAddress || formData.address,
-            mobile_primary: formData.mobilePrimary,
-            mobile_alternative: formData.mobileAlternative,
-            reference1_name: formData.reference1Name,
-            reference1_address: formData.reference1Address,
-            reference1_contact: formData.reference1Contact,
-            reference1_relationship: formData.reference1Relationship,
-            reference2_name: formData.reference2Name,
-            reference2_address: formData.reference2Address,
-            reference2_contact: formData.reference2Contact,
-            reference2_relationship: formData.reference2Relationship,
-            interest_scheme: interestSchemeIds,
-            gold_price_lock_date: formData.goldPriceLockDate,
-            down_payment_details: formData.downPaymentDetails,
+            date_of_birth: formData.dateOfBirth,
+            father_mother_spouse_name: formData.fatherMotherSpouseName,
+            aadhaar_number: formData.aadhaarNumber,
+            pan_number: formData.panNumber,
+            gender: formData.gender || 'Male',
+            marital_status: formData.maritalStatus || 'Single',
+            occupation: formData.occupation === 'Others' ? formData.occupationOther : formData.occupation,
+            monthly_income: null,
+            employment_type: null,
+            loan_purpose: null,
             loan_amount: parseFloat(formData.loanAmount),
             tenure: tenureToInsert,
             processing_fee: formData.processingFee,
             status: 'Pending',
             declaration_accepted: formData.declarationAccepted,
+            interest_scheme: formData.interestScheme || 'Standard',
+            gold_price_lock_date: formData.goldPriceLockDate,
+            reference1_name: formData.reference1Name || 'Not provided',
+            reference1_address: formData.reference1Address || 'Not provided',
+            reference1_contact: formData.reference1Contact || '0000000000',
+            reference1_relationship: formData.reference1Relationship || 'Friend',
+            reference2_name: formData.reference2Name || 'Not provided',
+            reference2_address: formData.reference2Address || 'Not provided',
+            reference2_contact: formData.reference2Contact || '0000000000',
+            reference2_relationship: formData.reference2Relationship || 'Friend',
+            bank_name: null,
+            account_number: null,
+            ifsc_code: null,
+            product_id: primaryProduct ? primaryProduct.id : null,
+            product_name: primaryProduct ? primaryProduct.name : 'Product Loan',
+            product_image_url: primaryProduct ? primaryProduct.image_url || '' : '',
+            product_price: primaryProduct ? primaryProduct.price : parseFloat(formData.loanAmount),
+            product_category: null,
+            merchant_id: profile.id,
+            introduced_by: formData.introducedBy || null,
+            downpayment_percentage: downPaymentPercentage,
+            downpayment_amount: safeDownPaymentAmount,
+            referral_code: formData.referralCode || null,
           })
           .select()
           .single();
 
-        if (loanError || !loanData) throw loanError || new Error('Failed to create loan');
-
-        // 3) Insert corresponding row into product_loans table for product loan tracking
-        let productLoanId: string | null = null;
-        try {
-          const primaryProduct = (formData.selectedProducts || [])[0] || null;
-          const { data: productLoan, error: productLoanErr } = await supabase
-            .from('product_loans')
-            .insert({
-              user_id: profile.id,
-              first_name: formData.firstName,
-              last_name: formData.lastName,
-              email_id: formData.emailId,
-              mobile_primary: formData.mobilePrimary,
-              mobile_alternative: formData.mobileAlternative || null,
-              address: formData.address,
-              pin_code: formData.pinCode,
-              date_of_birth: formData.dateOfBirth,
-              father_mother_spouse_name: formData.fatherMotherSpouseName,
-              aadhaar_number: formData.aadhaarNumber,
-              pan_number: formData.panNumber,
-              gender: formData.gender || 'Male',
-              marital_status: formData.maritalStatus || 'Single',
-              occupation: formData.occupation === 'Others' ? formData.occupationOther : formData.occupation,
-              monthly_income: null,
-              employment_type: null,
-              loan_purpose: null,
-              loan_amount: parseFloat(formData.loanAmount),
-              tenure: tenureToInsert,
-              processing_fee: formData.processingFee,
-              status: 'Pending',
-              declaration_accepted: formData.declarationAccepted,
-              interest_scheme: formData.interestScheme || 'Standard',
-              gold_price_lock_date: formData.goldPriceLockDate,
-              reference1_name: formData.reference1Name || 'Not provided',
-              reference1_address: formData.reference1Address || 'Not provided',
-              reference1_contact: formData.reference1Contact || '0000000000',
-              reference1_relationship: formData.reference1Relationship || 'Friend',
-              reference2_name: formData.reference2Name || 'Not provided',
-              reference2_address: formData.reference2Address || 'Not provided',
-              reference2_contact: formData.reference2Contact || '0000000000',
-              reference2_relationship: formData.reference2Relationship || 'Friend',
-              bank_name: null,
-              account_number: null,
-              ifsc_code: null,
-              product_id: primaryProduct ? primaryProduct.id : null,
-              product_name: primaryProduct ? primaryProduct.name : 'Product Loan',
-              product_image_url: '',
-              product_price: primaryProduct ? primaryProduct.price : parseFloat(formData.loanAmount),
-              product_category: null,
-              merchant_id: profile.id,
-              introduced_by: formData.introducedBy || null,
-              downpayment_percentage: downPaymentPercentage,
-              downpayment_amount: safeDownPaymentAmount,
-            })
-            .select()
-            .single();
-
-          if (productLoanErr || !productLoan) throw productLoanErr || new Error('Failed to create product loan');
-          productLoanId = productLoan.id as string;
-        } catch (_) {
-          // ignore if table/columns not present; main loan row already created
+        if (productLoanErr || !productLoan) {
+          console.error('Product loan insert error:', productLoanErr);
+          throw productLoanErr || new Error('Failed to create product loan');
+        }
+        
+        productLoanId = productLoan.id as string;
+        if (!productLoanId) {
+          throw new Error('Product loan created but no ID returned');
         }
 
         // 3) Insert loan_documents mapping
@@ -505,7 +474,7 @@ export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalPro
           };
 
           const docsPayload = uploadedFiles.map((u) => ({
-            loan_id: productLoanId || loanData.id,
+            loan_id: productLoanId,
             document_type: mapDocType(u.type),
             file_name: u.file.name,
             file_path: u.path,
@@ -517,13 +486,13 @@ export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalPro
         }
 
         const emailWebhook = import.meta.env.VITE_EMAIL_WEBHOOK_URL as string | undefined;
-        if (emailWebhook) {
+        if (emailWebhook && productLoanId) {
           try {
             const payload = {
               to: formData.emailId,
               subject: `Loan Application Submitted - ${formData.firstName} ${formData.lastName}`,
-              loanId: loanData.id,
-              applicationNumber: (loanData as any).application_number || null,
+              loanId: productLoanId,
+              applicationNumber: `App${productLoanId.slice(0, 8).toUpperCase()}`,
               applicant: {
                 firstName: formData.firstName,
                 lastName: formData.lastName,
@@ -618,6 +587,8 @@ export default function ApplyLoanModal({ onClose, onSuccess }: ApplyLoanModalPro
             setFormData={setFormData}
             errors={errors}
             setErrors={setErrors}
+            merchantId={profile?.id}
+            merchantName={profile?.full_name || profile?.username}
           />
 
           {currentStep === 5 && (
