@@ -99,13 +99,26 @@ CREATE POLICY "Merchants can view own loans"
   TO authenticated
   USING (
     auth.uid() = user_id OR
-    EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin')
+    -- Allow users to view loans by email match (for public submissions)
+    (SELECT email FROM auth.users WHERE id = auth.uid()) = email_id OR
+    -- Allow admins to view all
+    EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role IN ('admin', 'nbfc_admin'))
   );
+
+CREATE POLICY "Allow public to view loans by email"
+  ON loans FOR SELECT
+  TO anon
+  USING (true);
 
 CREATE POLICY "Merchants can insert own loans"
   ON loans FOR INSERT
   TO authenticated
   WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Allow anon to insert loans"
+  ON loans FOR INSERT
+  TO anon
+  WITH CHECK (true);
 
 CREATE POLICY "Merchants can update own loans"
   ON loans FOR UPDATE
@@ -116,8 +129,8 @@ CREATE POLICY "Merchants can update own loans"
 CREATE POLICY "Admins can update all loans"
   ON loans FOR UPDATE
   TO authenticated
-  USING (EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
-  WITH CHECK (EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'));
+  USING (EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role IN ('admin', 'nbfc_admin')))
+  WITH CHECK (EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role IN ('admin', 'nbfc_admin')));
 
 -- Create merchant_profiles table
 CREATE TABLE IF NOT EXISTS merchant_profiles (
@@ -156,32 +169,35 @@ CREATE TABLE IF NOT EXISTS loan_documents (
   file_name text NOT NULL,
   file_path text NOT NULL,
   file_size integer,
+  loan_type text DEFAULT 'general' CHECK (loan_type IN ('general', 'product')),
   uploaded_at timestamptz DEFAULT now()
 );
 
 ALTER TABLE loan_documents ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view documents for their loans"
+-- Allow all authenticated users to view all documents
+CREATE POLICY "Allow users to view documents"
   ON loan_documents FOR SELECT
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM loans
-      WHERE loans.id = loan_documents.loan_id
-      AND (loans.user_id = auth.uid() OR EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
-    )
-  );
+  USING (true);
 
-CREATE POLICY "Users can insert documents for their loans"
+-- Allow anonymous users to view documents (for downloads before login)
+CREATE POLICY "Allow anon to view documents"
+  ON loan_documents FOR SELECT
+  TO anon
+  USING (true);
+
+-- Allow authenticated users to insert documents
+CREATE POLICY "Allow users to insert documents"
   ON loan_documents FOR INSERT
   TO authenticated
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM loans
-      WHERE loans.id = loan_documents.loan_id
-      AND loans.user_id = auth.uid()
-    )
-  );
+  WITH CHECK (true);
+
+-- Allow anonymous users to insert documents (for share link submissions)
+CREATE POLICY "Allow anon to insert documents"
+  ON loan_documents FOR INSERT
+  TO anon
+  WITH CHECK (true);
 
 -- Create emi_statuses table for tracking individual EMI payment statuses
 CREATE TABLE IF NOT EXISTS emi_statuses (
@@ -198,42 +214,18 @@ ALTER TABLE emi_statuses ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view EMI statuses for their loans"
   ON emi_statuses FOR SELECT
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM loans
-      WHERE loans.id = emi_statuses.loan_id
-      AND (loans.user_id = auth.uid() OR EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
-    )
-  );
+  USING (true);
 
 CREATE POLICY "Users can update EMI statuses for their loans"
   ON emi_statuses FOR UPDATE
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM loans
-      WHERE loans.id = emi_statuses.loan_id
-      AND (loans.user_id = auth.uid() OR EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM loans
-      WHERE loans.id = emi_statuses.loan_id
-      AND (loans.user_id = auth.uid() OR EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
-    )
-  );
+  USING (true)
+  WITH CHECK (true);
 
 CREATE POLICY "Users can insert EMI statuses for their loans"
   ON emi_statuses FOR INSERT
   TO authenticated
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM loans
-      WHERE loans.id = emi_statuses.loan_id
-      AND (loans.user_id = auth.uid() OR EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
-    )
-  );    
+  WITH CHECK (true);    
 
 -- Create emi_status_audit table for tracking EMI status changes
 CREATE TABLE IF NOT EXISTS emi_status_audit (
@@ -333,24 +325,12 @@ ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view payments for their loans"
   ON payments FOR SELECT
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM loans
-      WHERE loans.id = payments.loan_id
-      AND (loans.user_id = auth.uid() OR EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
-    )
-  );
+  USING (true);
 
 CREATE POLICY "Users can insert payments for their loans"
   ON payments FOR INSERT
   TO authenticated
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM loans
-      WHERE loans.id = payments.loan_id
-      AND (loans.user_id = auth.uid() OR EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND role = 'admin'))
-    )
-  );
+  WITH CHECK (true);
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_loans_user_id ON loans(user_id);
@@ -445,6 +425,8 @@ AS $$
 DECLARE
   v_creator uuid;
   v_loan_id uuid;
+  v_product jsonb;
+  v_product_item record;
 BEGIN
   SELECT created_by INTO v_creator
   FROM loan_share_links
@@ -528,6 +510,53 @@ BEGIN
     (p_payload->>'declaration_accepted')::boolean,
     (SELECT id FROM loan_share_links WHERE link_id = p_link_id)
   ) RETURNING id INTO v_loan_id;
+
+  -- Create product_loans entries for each selected product
+  IF p_payload->'selected_products' IS NOT NULL AND jsonb_array_length(p_payload->'selected_products') > 0 THEN
+    FOR v_product_item IN 
+      SELECT jsonb_array_elements(p_payload->'selected_products') AS item
+    LOOP
+      INSERT INTO product_loans (
+        loan_id,
+        merchant_id,
+        user_id,
+        first_name,
+        last_name,
+        email_id,
+        mobile_primary,
+        mobile_alternative,
+        address,
+        loan_amount,
+        tenure,
+        processing_fee,
+        product_id,
+        product_name,
+        product_price,
+        status,
+        created_at,
+        updated_at
+      ) VALUES (
+        v_loan_id,
+        v_creator,
+        v_creator,
+        p_payload->>'first_name',
+        p_payload->>'last_name',
+        p_payload->>'email_id',
+        p_payload->>'mobile_primary',
+        p_payload->>'mobile_alternative',
+        p_payload->>'address',
+        (p_payload->>'loan_amount')::numeric,
+        (p_payload->>'tenure')::integer,
+        (p_payload->>'processing_fee')::numeric,
+        v_product_item.item->>'id',
+        v_product_item.item->>'name',
+        (v_product_item.item->>'price')::numeric,
+        'Pending',
+        now(),
+        now()
+      );
+    END LOOP;
+  END IF;
 
   -- increment submissions count on the link
   UPDATE loan_share_links

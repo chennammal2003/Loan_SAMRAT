@@ -143,15 +143,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (error) throw error;
-    if (data.user) {
-      // On successful auth, just load the profile. Individual screens will
-      // enforce approval requirements using profile.is_active and role.
-      await fetchProfile(data.user.id);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) {
+        // Provide better error messages for common issues
+        if (error.message?.includes('Failed to fetch')) {
+          throw new Error('Connection error: Unable to reach authentication server');
+        } else if (error.message?.includes('Invalid login credentials')) {
+          throw new Error('Invalid email or password');
+        } else if (error.message?.includes('Email not confirmed')) {
+          throw new Error('Please verify your email before signing in');
+        }
+        throw error;
+      }
+      
+      if (data.user) {
+        // On successful auth, just load the profile
+        await fetchProfile(data.user.id);
+      }
+    } catch (err: any) {
+      console.error('Sign-in error:', err);
+      throw err;
     }
   };
 

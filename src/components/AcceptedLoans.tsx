@@ -160,7 +160,7 @@ export default function AcceptedLoans() {
   }
 
   return (
-    <div>
+    <div className="bg-gray-50 dark:bg-gray-900 min-h-screen p-4 md:p-6">
       {/* Search */}
       <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div />
@@ -170,13 +170,13 @@ export default function AcceptedLoans() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search name, phone, email, address, loan ID"
-            className="w-full md:w-80 px-3 py-2 rounded border bg-white dark:bg-gray-800 dark:border-gray-700 text-sm"
+            className="w-full md:w-80 px-3 py-2 rounded border bg-white dark:bg-gray-800 dark:border-gray-700 border-gray-300 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
           />
-          <button onClick={downloadCSV} className="px-3 py-2 rounded bg-emerald-600 text-white text-sm hover:bg-emerald-700">Download Excel</button>
+          <button onClick={downloadCSV} className="px-3 py-2 rounded bg-emerald-600 text-white text-sm hover:bg-emerald-700 transition-colors whitespace-nowrap">Download Excel</button>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden border border-gray-200 dark:border-gray-700">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-green-50 dark:bg-green-900/20">
@@ -211,7 +211,13 @@ export default function AcceptedLoans() {
                     {loan.mobile_primary}
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${loan.status==='Accepted'?'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400': loan.status==='Verified'?'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400':'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400'}`}>
+                    <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${
+                      loan.status === 'Accepted'
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                        : loan.status === 'Verified'
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                        : 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400'
+                    }`}>
                       {loan.status}
                     </span>
                   </td>
@@ -238,21 +244,21 @@ export default function AcceptedLoans() {
 
       {/* Pagination */}
       {filtered.length > 0 && (
-        <div className="mt-4 flex items-center justify-between">
-          <p className="text-xs text-gray-500 dark:text-gray-400">Showing {Math.min(total, start + 1)}–{Math.min(total, end)} of {total}</p>
+        <div className="mt-4 flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+          <p className="text-xs text-gray-600 dark:text-gray-400">Showing {Math.min(total, start + 1)}–{Math.min(total, end)} of {total}</p>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="px-3 py-1 rounded border bg-white dark:bg-gray-800 dark:border-gray-700 text-sm disabled:opacity-50"
+              className="px-3 py-1 rounded border bg-white dark:bg-gray-800 dark:border-gray-700 border-gray-300 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Prev
             </button>
-            <span className="text-sm text-gray-600 dark:text-gray-300">Page {page} of {totalPages}</span>
+            <span className="text-sm text-gray-700 dark:text-gray-300">Page {page} of {totalPages}</span>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              className="px-3 py-1 rounded border bg-white dark:bg-gray-800 dark:border-gray-700 text-sm disabled:opacity-50"
+              className="px-3 py-1 rounded border bg-white dark:bg-gray-800 dark:border-gray-700 border-gray-300 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Next
             </button>

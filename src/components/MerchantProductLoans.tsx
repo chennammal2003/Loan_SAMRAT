@@ -240,29 +240,54 @@ export default function MerchantProductLoans() {
 
     setSavingDeliveryDate(true);
     try {
-      // Update the product_loans table with delivery date and status
-      // The database trigger will automatically:
-      // 1. Set product_delivery_status = 'Product Delivered'
-      // 2. Change status from 'Loan Disbursed' to 'Delivered'
-      const { error } = await supabase
+      // Validate delivery date is not in future
+      const selectedDate = new Date(deliveryDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      if (selectedDate > today) {
+        alert('❌ Delivery date cannot be in the future. Please select today or an earlier date.');
+        setSavingDeliveryDate(false);
+        return;
+      }
+
+      console.log('Saving delivery date:', {
+        loan_id: deliveryModalLoan.id,
+        product_delivered_date: deliveryDate,
+        product_delivery_status: 'Delivered',
+        updated_at: new Date().toISOString()
+      });
+
+      // Update the product_loans table with delivery date AND status
+      const { data, error } = await supabase
         .from('product_loans')
         .update({
           product_delivered_date: deliveryDate,
+          product_delivery_status: 'Product Delivered',  // ✅ Match exact status
           updated_at: new Date().toISOString()
         })
-        .eq('id', deliveryModalLoan.id);
+        .eq('id', deliveryModalLoan.id)
+        .select();  // Get back the updated record
 
-      if (error) throw error;
+      console.log('Update response:', { data, error });
+
+      if (error) {
+        console.error('Database error details:', error);
+        throw new Error(`Database error: ${error.message}`);
+      }
+
+      if (!data || data.length === 0) {
+        throw new Error('No record was updated. Please check if the loan ID is valid.');
+      }
 
       // Update local state with new status
-      // The database trigger will update status to 'Delivered'
       setLoans(prev => prev.map(l => 
         l.id === deliveryModalLoan.id 
           ? { 
               ...l, 
               product_delivered_date: deliveryDate, 
-              product_delivery_status: 'Product Delivered',
-              status: 'Delivered' // Updated status
+              product_delivery_status: 'Product Delivered',  // ✅ Match exact status
+              status: 'Delivered'
             }
           : l
       ));
@@ -270,10 +295,23 @@ export default function MerchantProductLoans() {
       // Close modal and reset
       setDeliveryModalLoan(null);
       setDeliveryDate('');
-      alert('Product delivery date saved successfully! Status updated to "Delivered"');
-    } catch (error) {
+      
+      const successMsg = `✅ Product Delivery Saved Successfully!\n\n` +
+        `Delivery Date: ${new Date(deliveryDate).toLocaleDateString('en-IN')}\n` +
+        `Status: Product Delivered\n` +
+        `Payment tracking will start from this date.`;
+      
+      alert(successMsg);
+    } catch (error: any) {
       console.error('Error saving delivery date:', error);
-      alert('Failed to save delivery date. Please try again.');
+      const errorMsg = error?.message || 'Unknown error occurred';
+      const detailedError = `❌ Failed to Save Delivery Date\n\n` +
+        `Error: ${errorMsg}\n\n` +
+        `Please try again. If the problem persists:\n` +
+        `1. Refresh the page\n` +
+        `2. Check internet connection\n` +
+        `3. Contact support if needed`;
+      alert(detailedError);
     } finally {
       setSavingDeliveryDate(false);
     }
@@ -470,7 +508,7 @@ export default function MerchantProductLoans() {
                         >
                           {loan.status}
                         </span>
-                        {loan.status === 'Loan Disbursed' && !loan.product_delivered_date && (
+                        {(loan.status === 'Loan Disbursed' || (loan as any).product_delivery_status !== 'Product Delivered') && !loan.product_delivered_date && (
                           <button
                             onClick={() => {
                               setDeliveryModalLoan(loan);

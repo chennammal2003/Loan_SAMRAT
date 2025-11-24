@@ -115,38 +115,43 @@ export function UserTable({ users, onViewDetails, onToggleStatus }: UserTablePro
                   {getRoleBadge(user.role)}
                 </td>
                 <td className="px-6 py-4">
-                  <button
-                    onClick={() => {
-                      // Only show modal for merchants and admins that need approval
-                      if ((user.role === 'merchant' || user.role === 'admin' || user.role === 'nbfc_admin')) {
-                        setStatusModalUser(user);
-                      } else {
-                        // For other users, just toggle directly
-                        onToggleStatus(user.id, !!user.is_active);
-                      }
-                    }}
-                    className="group flex items-center cursor-pointer hover:opacity-80 transition-opacity"
-                  >      
-                    {user.is_active ? (
-                      <>
-                        <ToggleRight className="mr-2 h-6 w-6 text-green-500 transition-transform group-hover:scale-110" />
-                        <span className="font-medium text-green-700">
-                          {user.role === 'merchant' || user.role === 'admin' || user.role === 'nbfc_admin'
-                            ? 'Approved'
-                            : 'Active'}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <ToggleLeft className="mr-2 h-6 w-6 text-gray-400 transition-transform group-hover:scale-110" />
-                        <span className="font-medium text-gray-500">
-                          {user.role === 'merchant' || user.role === 'admin' || user.role === 'nbfc_admin'
-                            ? 'Pending Approval'
-                            : 'Inactive'}
-                        </span>
-                      </>
-                    )}
-                  </button>
+                  {user.role === 'customer' ? (
+                    // Customers always active - no toggle allowed
+                    <div className="flex items-center">
+                      <ToggleRight className="mr-2 h-6 w-6 text-green-500" />
+                      <span className="font-medium text-green-700">Active</span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        // Only show modal for merchants and admins that need approval
+                        if ((user.role === 'merchant' || user.role === 'admin' || user.role === 'nbfc_admin')) {
+                          setStatusModalUser(user);
+                        }
+                      }}
+                      className="group flex items-center cursor-pointer hover:opacity-80 transition-opacity"
+                    >      
+                      {user.is_active ? (
+                        <>
+                          <ToggleRight className="mr-2 h-6 w-6 text-green-500 transition-transform group-hover:scale-110" />
+                          <span className="font-medium text-green-700">
+                            {user.role === 'merchant' || user.role === 'admin' || user.role === 'nbfc_admin'
+                              ? 'Approved'
+                              : 'Active'}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <ToggleLeft className="mr-2 h-6 w-6 text-gray-400 transition-transform group-hover:scale-110" />
+                          <span className="font-medium text-gray-500">
+                            {user.role === 'merchant' || user.role === 'admin' || user.role === 'nbfc_admin'
+                              ? 'Pending Approval'
+                              : 'Inactive'}
+                          </span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">

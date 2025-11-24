@@ -330,6 +330,13 @@ export default function SuperAdminDashboard() {
 
   const handleToggleStatus = async (userId: string, currentStatus: boolean) => {
     try {
+      // Prevent toggling customer status - customers must always be active
+      const user = users.find((u) => u.id === userId);
+      if (user?.role === 'customer') {
+        console.warn('Cannot toggle status for customers - they must always remain active');
+        return;
+      }
+
       const { error: err } = await supabase
         .from('user_profiles')
         .update({ is_active: !currentStatus, updated_at: new Date().toISOString() })

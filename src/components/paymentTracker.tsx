@@ -60,7 +60,7 @@ const PaymentTracker: React.FC = () => {
         const { data, error } = await supabase
           .from('product_loans')
           .select('*')
-          .eq('status', 'Loan Disbursed')
+          .in('status', ['Verified', 'Accepted', 'Loan Disbursed', 'Delivered'])
           .order('created_at', { ascending: false });
         if (error) throw error;
         const loanRows = data || [];
@@ -200,10 +200,15 @@ const PaymentTracker: React.FC = () => {
       .channel('payments-tracker-emi-statuses')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'emi_statuses' }, () => fetchLoans())
       .subscribe();
+    const ch4 = supabase
+      .channel('payments-tracker-product-emi-statuses')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'product_emi_statuses' }, () => fetchLoans())
+      .subscribe();
     return () => {
       supabase.removeChannel(ch);
       supabase.removeChannel(ch2);
       supabase.removeChannel(ch3);
+      supabase.removeChannel(ch4);
     };
   }, []);
 

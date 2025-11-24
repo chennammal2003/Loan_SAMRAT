@@ -13,10 +13,12 @@ interface DocsModalProps {
 export default function DocsModal({ loanId, fullName, onClose, loanType = 'general', onlyAdditional = false }: DocsModalProps) {
   const [docs, setDocs] = useState<LoanDocument[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
+        setError(null);
         let query = supabase
           .from('loan_documents')
           .select('*')
@@ -30,8 +32,18 @@ export default function DocsModal({ loanId, fullName, onClose, loanType = 'gener
           query = query.eq('loan_type', loanType);
         }
 
-        const { data, error } = await query;
-        if (error) throw error;
+        const { data, error: queryError } = await query;
+        if (queryError) {
+          console.error('Document fetch error:', {
+            message: queryError.message,
+            code: queryError.code,
+            details: queryError.details,
+            hint: queryError.hint,
+            loanId,
+            loanType,
+          });
+          throw queryError;
+        }
 
         let result = data || [];
         if (onlyAdditional) {
@@ -42,8 +54,9 @@ export default function DocsModal({ loanId, fullName, onClose, loanType = 'gener
           // For product loans, consider all fetched docs as additional
         }
         setDocs(result);
-      } catch (e) {
+      } catch (e: any) {
         console.error('Failed to load docs', e);
+        setError(e.message || 'Failed to load documents');
       } finally {
         setLoading(false);
       }
@@ -214,6 +227,11 @@ export default function DocsModal({ loanId, fullName, onClose, loanType = 'gener
         <div className="p-4">
           {loading ? (
             <p className="text-sm text-gray-600 dark:text-gray-300">Loading...</p>
+          ) : error ? (
+            <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+              <p className="text-sm text-red-700 dark:text-red-300">⚠️ Error loading documents: {error}</p>
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1">Check browser console for details</p>
+            </div>
           ) : docs.length === 0 ? (
             <p className="text-sm text-gray-600 dark:text-gray-300">No documents uploaded.</p>
           ) : (

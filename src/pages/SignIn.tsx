@@ -13,6 +13,24 @@ export default function SignIn() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
 
+  const testNetworkConnection = async () => {
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      console.log('[Network Test] Checking connection to:', supabaseUrl);
+      
+      const response = await fetch(supabaseUrl, {
+        method: 'HEAD',
+        mode: 'no-cors',
+      });
+      
+      console.log('[Network Test] Supabase reachable:', response.status);
+      return true;
+    } catch (err: any) {
+      console.error('[Network Test] Failed to reach Supabase:', err?.message);
+      return false;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -29,12 +47,41 @@ export default function SignIn() {
 
     setLoading(true);
     try {
+      // Test network connectivity first
+      const canReachServer = await testNetworkConnection();
+      if (!canReachServer) {
+        throw new Error('Cannot reach Supabase server. Please check your internet connection.');
+      }
+
       await signIn(email, password);
       setTimeout(() => {
         navigate('/dashboard', { replace: true });
       }, 500);
     } catch (err: any) {
-      setError(err.message || 'Failed to sign in');
+      console.error('SignIn error details:', err);
+      console.error('Error message:', err?.message);
+      console.error('Error type:', err?.name);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to sign in';
+      
+      if (err.message) {
+        if (err.message.includes('Cannot reach Supabase')) {
+          errorMessage = 'Cannot reach authentication server. Please check:\n1. Your internet connection\n2. Supabase service status\n3. Your firewall settings';
+        } else if (err.message.includes('Failed to fetch') || err.message.includes('fetch')) {
+          errorMessage = 'Connection error: Unable to reach authentication server. Possible causes:\n• Internet connection issue\n• Supabase service down\n• Firewall blocking requests\n\nTry again or contact support.';
+        } else if (err.message.includes('Invalid login credentials')) {
+          errorMessage = 'Invalid email or password. Please check and try again.';
+        } else if (err.message.includes('User not found')) {
+          errorMessage = 'No account found with this email';
+        } else if (err.message.includes('Email not confirmed')) {
+          errorMessage = 'Please confirm your email before signing in';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
+      setError(errorMessage);
       setLoading(false);
     }
   };
@@ -61,7 +108,7 @@ export default function SignIn() {
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-6 bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg">
           {error && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg">
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg whitespace-pre-wrap text-sm">
               {error}
             </div>
           )}
