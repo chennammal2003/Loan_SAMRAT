@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Shield, LogOut, Moon, Sun, List, CheckCircle, Users, HandCoins, TrendingUp, Package, FileText, Settings as SettingsIcon } from 'lucide-react';
+import { Shield, LogOut, Moon, Sun, List, CheckCircle, Users, HandCoins, TrendingUp, Package, FileText, Settings as SettingsIcon, Building2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import ManageLoans from './ManageLoans';
 import AcceptedLoans from './AcceptedLoans';
@@ -14,8 +14,10 @@ import AdminProductLoans from './AdminProductLoans';
 import Settings from './Settings';
 import AdminNotificationsPanel from './AdminNotificationsPanel';
 import AdminActiveTieUps from './AdminActiveTieUps';
+import NbfcMerchantsView from './NbfcMerchantsView';
+import NbfcPaymentTracker from './NbfcPaymentTracker';
 
-type ActiveTab = 'home' | 'manage' | 'accepted' | 'disbursed' | 'payments' | 'merchants' | 'products' | 'productLoans' | 'settings';
+type ActiveTab = 'home' | 'manage' | 'accepted' | 'disbursed' | 'payments' | 'merchants' | 'products' | 'productLoans' | 'settings' | 'nbfcMerchants' | 'nbfcPayments';
 
 export default function AdminDashboard() {
   const { profile, signOut } = useAuth();
@@ -148,6 +150,34 @@ export default function AdminDashboard() {
             <span>Merchant Details</span>
           </button>
 
+          {profile?.role === 'nbfc_admin' && (
+            <>
+              <div className="px-4 py-2 mt-4 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">NBFC Management</div>
+              <button
+                onClick={() => setActiveTab('nbfcMerchants')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                  activeTab === 'nbfcMerchants'
+                    ? 'bg-orange-600 text-white'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                <Building2 className="w-5 h-5" />
+                <span>Tied Merchants</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('nbfcPayments')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                  activeTab === 'nbfcPayments'
+                    ? 'bg-orange-600 text-white'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                <TrendingUp className="w-5 h-5" />
+                <span>Tied Loans</span>
+              </button>
+            </>
+          )}
+
           <button
             onClick={() => setActiveTab('settings')}
             className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
@@ -196,6 +226,8 @@ export default function AdminDashboard() {
               {activeTab === 'disbursed' && 'Disbursed Loans'}
               {activeTab === 'payments' && 'Payment Tracker'}
               {activeTab === 'merchants' && 'Merchants'}
+              {activeTab === 'nbfcMerchants' && 'Tied-Up Merchants'}
+              {activeTab === 'nbfcPayments' && 'Tied Loans Payment Tracker'}
               {activeTab === 'settings' && 'Settings'}
             </h1>
             <button
@@ -227,6 +259,8 @@ export default function AdminDashboard() {
           {activeTab === 'disbursed' && <DisbursedLoans />}
           {activeTab === 'payments' && <PaymentTracker />}
           {activeTab === 'merchants' && <MerchantDetails />}
+          {activeTab === 'nbfcMerchants' && <NbfcMerchantsView />}
+          {activeTab === 'nbfcPayments' && <NbfcPaymentTracker />}
           {activeTab === 'settings' && <Settings role="admin" />}
         </div>
       </main>

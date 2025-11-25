@@ -89,17 +89,34 @@ const PaymentTracker: React.FC = () => {
         let emiStatuses: Record<string, string[]> = {};
         if (loanRows.length > 0) {
           const ids = loanRows.map((l: any) => l.id);
+          // Try product_emi_statuses first (NEW table with product loan tracking)
           const { data: emi, error: eErr } = await supabase
-            .from('emi_statuses')
-            .select('loan_id, installment_index, status')
-            .in('loan_id', ids);
-          if (!eErr && emi) {
+            .from('product_emi_statuses')
+            .select('product_loan_id, installment_index, status')
+            .in('product_loan_id', ids);
+          
+          if (!eErr && emi && emi.length > 0) {
+            // Use new product_emi_statuses table
             const map: Record<string, string[]> = {};
             for (const row of emi as any[]) {
-              if (!map[row.loan_id]) map[row.loan_id] = [];
-              map[row.loan_id][row.installment_index] = row.status;
+              if (!map[row.product_loan_id]) map[row.product_loan_id] = [];
+              map[row.product_loan_id][row.installment_index] = row.status;
             }
             emiStatuses = map;
+          } else {
+            // Fallback to legacy emi_statuses table
+            const { data: emiOld, error: eErrOld } = await supabase
+              .from('emi_statuses')
+              .select('loan_id, installment_index, status')
+              .in('loan_id', ids);
+            if (!eErrOld && emiOld) {
+              const map: Record<string, string[]> = {};
+              for (const row of emiOld as any[]) {
+                if (!map[row.loan_id]) map[row.loan_id] = [];
+                map[row.loan_id][row.installment_index] = row.status;
+              }
+              emiStatuses = map;
+            }
           }
         }
         const rows = loanRows.map((l: any) => {
@@ -642,7 +659,136 @@ const PaymentTracker: React.FC = () => {
             productDeliveryStatus: selectedLoan.productDeliveryStatus || undefined,
             createdAt: selectedLoan.createdAt
           } as TrackerLoan}
-          onClose={() => setSelectedLoan(null)}
+          onClose={() => {
+            setSelectedLoan(null);
+            // Refresh loans to get updated status from database
+            setTimeout(() => {
+              const fetchLoans = async () => {
+                try {
+                  const { data, error } = await supabase
+                    .from('product_loans')
+                    .select('*')
+                    .in('status', ['Verified', 'Accepted', 'Loan Disbursed', 'Delivered'])
+                    .order('created_at', { ascending: false });
+                  if (error) throw error;
+                  const loanRows = data || [];
+                  // Fetch disbursement dates
+                  let byId: Record<string, string> = {};
+                  if (loanRows.length > 0) {
+                    const ids = loanRows.map((l: any) => l.id);
+                    const { data: disb, error: dErr } = await supabase
+                      .from('loan_disbursements')
+                      .select('loan_id, disbursement_date')
+                      .in('loan_id', ids);
+                    if (!dErr && disb) {
+                      const map: Record<string, string> = {};
+                      for (const row of disb as any[]) {
+                        const prev = map[row.loan_id];
+                        const cur = row.disbursement_date;
+                        if (!prev || new Date(cur).getTime() > new Date(prev).getTime()) {
+                          map[row.loan_id] = cur;
+                        }
+                      }
+                      byId = map;
+                    }
+                  }
+                  // Fetch EMI statuses
+                  let emiStatuses: Record<string, string[]> = {};
+                  if (loanRows.length > 0) {
+                    const ids = loanRows.map((l: any) => l.id);
+                    const { data: emi, error: eErr } = await supabase
+                      .from('product_emi_statuses')
+                      .select('product_loan_id, installment_index, status')
+                      .in('product_loan_id', ids);
+                    if (!eErr && emi) {
+                      const map: Record<string, string[]> = {};
+                      for (const row of emi as any[]) {
+                        if (!map[row.product_loan_id]) map[row.product_loan_id] = [];
+                        map[row.product_loan_id][row.installment_index] = row.status;
+                      }
+                      emiStatuses = map;
+                    } else {
+                      // Fallback to emi_statuses
+                      const { data: emiOld, error: eErrOld } = await supabase
+                        .from('emi_statuses')
+                        .select('loan_id, installment_index, status')
+                        .in('loan_id', ids);
+                      if (!eErrOld && emiOld) {
+                        const map: Record<string, string[]> = {};
+                        for (const row of emiOld as any[]) {
+                          if (!map[row.loan_id]) map[row.loan_id] = [];
+                          map[row.loan_id][row.installment_index] = row.status;
+                        }
+                        emiStatuses = map;
+                      }
+                    }
+                  }
+                  // Transform to LoanApplication rows
+                  const rows = loanRows.map((l: any) => {
+                    const fullName = `${l.first_name ?? ''} ${l.last_name ?? ''}`.trim();
+                    const loanAmount = Number(l.loan_amount ?? 0);
+                    const tenure = Number(l.tenure ?? 0);
+                    const r = 0.36 / 12;
+                    const pow = tenure > 0 ? Math.pow(1 + r, tenure) : 0;
+                    const emiAmount = tenure > 0 ? Math.round((loanAmount * r * pow) / (pow - 1)) : 0;
+                    const statuses = emiStatuses[l.id] || [];
+                    const paidCount = statuses.filter(s => s === 'Paid').length;
+                    const ecsSuccessCount = statuses.filter(s => s === 'ECS Success').length;
+                    const bounceCount = statuses.filter(s => s === 'ECS Bounce').length;
+                    const overdueCount = statuses.filter(s => s === 'Due Missed').length;
+                    let status: 'ontrack' | 'overdue' | 'paid' | 'bounce' | 'ecs_success' = 'ontrack';
+                    if (bounceCount > 0) {
+                      status = 'bounce';
+                    } else if (overdueCount > 0) {
+                      status = 'overdue';
+                    } else if (ecsSuccessCount === tenure) {
+                      status = 'ecs_success';
+                    } else if (paidCount === tenure) {
+                      status = 'paid';
+                    } else if (paidCount + ecsSuccessCount === tenure) {
+                      status = 'paid';
+                    } else if (paidCount + ecsSuccessCount > 0) {
+                      status = 'ontrack';
+                    }
+                    const paidAmountDb = Number(l.paid_amount ?? 0);
+                    const paidAmountByStatus = (paidCount + ecsSuccessCount) * emiAmount;
+                    const paidAmount = Math.max(paidAmountDb, paidAmountByStatus);
+                    const totalPayable = tenure * emiAmount;
+                    const remainingAmount = Math.max(totalPayable - paidAmount, 0);
+                    return {
+                      id: l.id,
+                      applicationNumber: String(l.id),
+                      createdAt: String(l.created_at || ''),
+                      fullName,
+                      loanAmount,
+                      tenure,
+                      interestScheme: String(l.interest_scheme ?? ''),
+                      disbursedDate: byId[l.id] ?? l.gold_price_lock_date ?? l.created_at,
+                      emiAmount,
+                      totalPayable,
+                      paidAmount,
+                      remainingAmount,
+                      nextDueDate: '-',
+                      status,
+                      paymentsCompleted: paidCount + ecsSuccessCount,
+                      totalPayments: tenure,
+                      mobileNumber: l.mobile_primary ?? '-',
+                      introducedBy: l.introduced_by ?? '-',
+                      productImageUrl: l.product_image_url ?? null,
+                      productName: l.product_name ?? null,
+                      productDeliveredDate: l.product_delivered_date ?? null,
+                      productDeliveryStatus: l.product_delivery_status ?? null,
+                    } as LoanApplication;
+                  });
+                  setLoans(rows);
+                  setLastUpdated(new Date());
+                } catch (error) {
+                  console.error('Error refreshing loans:', error);
+                }
+              };
+              fetchLoans();
+            }, 500);
+          }}
           onUpdated={({ loanId, paidAmount, paymentsCompleted, status }) => {
             setLoans(prev => prev.map(l => l.id === loanId
               ? { ...l, paidAmount, remainingAmount: Math.max(l.totalPayable - paidAmount, 0), paymentsCompleted, status }

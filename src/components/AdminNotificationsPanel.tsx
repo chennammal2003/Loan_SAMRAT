@@ -208,36 +208,36 @@ export default function AdminNotificationsPanel() {
       <h2 className="text-xl font-semibold text-gray-900 dark:text-white">NBFC Admin Dashboard</h2>
       {error && <div className="p-3 rounded bg-red-50 text-red-700 border border-red-200">{error}</div>}
       {items.map(n => (
-        <div key={n.id} className="rounded-xl border border-blue-200 bg-blue-50 text-blue-900 p-4 shadow-sm">
+        <div key={n.id} className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 text-blue-900 dark:text-blue-100 p-4 shadow-sm">
           <div className="text-sm">
             Merchant <span className="font-semibold">{n.payload?.merchant_name || n.payload.merchant_id}</span> requested to connect with <span className="font-medium">{n.payload?.nbfc_name || 'your NBFC'}</span>
           </div>
-          <div className="text-xs text-blue-800 mt-1">Received at {new Date(n.created_at).toLocaleTimeString()}</div>
+          <div className="text-xs text-blue-800 dark:text-blue-300 mt-1">Received at {new Date(n.created_at).toLocaleTimeString()}</div>
 
           {/* Merchant business details */}
           <div className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
-            <div className="rounded bg-white p-2 border border-blue-200">
-              <div className="text-gray-500">Business</div>
-              <div className="font-medium text-gray-900">{merchantMap[n.payload.merchant_id || '']?.business_name || '-'}</div>
+            <div className="rounded bg-white dark:bg-gray-800 p-2 border border-blue-200 dark:border-blue-800">
+              <div className="text-gray-500 dark:text-gray-400">Business</div>
+              <div className="font-medium text-gray-900 dark:text-white">{merchantMap[n.payload.merchant_id || '']?.business_name || '-'}</div>
             </div>
-            <div className="rounded bg-white p-2 border border-blue-200">
-              <div className="text-gray-500">Owner</div>
-              <div className="font-medium text-gray-900">{merchantMap[n.payload.merchant_id || '']?.owner_name || '-'}</div>
+            <div className="rounded bg-white dark:bg-gray-800 p-2 border border-blue-200 dark:border-blue-800">
+              <div className="text-gray-500 dark:text-gray-400">Owner</div>
+              <div className="font-medium text-gray-900 dark:text-white">{merchantMap[n.payload.merchant_id || '']?.owner_name || '-'}</div>
             </div>
-            <div className="rounded bg-white p-2 border border-blue-200">
-              <div className="text-gray-500">Email</div>
-              <div className="font-medium text-gray-900 truncate">{merchantMap[n.payload.merchant_id || '']?.email || '-'}</div>
+            <div className="rounded bg-white dark:bg-gray-800 p-2 border border-blue-200 dark:border-blue-800">
+              <div className="text-gray-500 dark:text-gray-400">Email</div>
+              <div className="font-medium text-gray-900 dark:text-white truncate">{merchantMap[n.payload.merchant_id || '']?.email || '-'}</div>
             </div>
-            <div className="rounded bg-white p-2 border border-blue-200">
-              <div className="text-gray-500">Phone</div>
-              <div className="font-medium text-gray-900">{merchantMap[n.payload.merchant_id || '']?.phone || '-'}</div>
+            <div className="rounded bg-white dark:bg-gray-800 p-2 border border-blue-200 dark:border-blue-800">
+              <div className="text-gray-500 dark:text-gray-400">Phone</div>
+              <div className="font-medium text-gray-900 dark:text-white">{merchantMap[n.payload.merchant_id || '']?.phone || '-'}</div>
             </div>
           </div>
 
           {/* No rate/duration/terms inputs per requirement */}
 
           <div className="mt-3 flex gap-2">
-            <button onClick={() => setViewId(n.payload.merchant_id)} className="px-3 py-1.5 rounded bg-white text-blue-900 border border-blue-300 hover:bg-blue-100">View Merchant Details</button>
+            <button onClick={() => setViewId(n.payload.merchant_id)} className="px-3 py-1.5 rounded bg-white dark:bg-gray-800 text-blue-900 dark:text-blue-100 border border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-gray-700">View Merchant Details</button>
             <button onClick={() => openApproveModal(n)} disabled={acting === n.id} className={`px-3 py-1.5 rounded text-white ${acting===n.id?'bg-green-400':'bg-green-600 hover:bg-green-700'}`}>Approve</button>
             <button onClick={() => actOnRequest(n, false)} disabled={acting === n.id} className={`px-3 py-1.5 rounded text-white ${acting===n.id?'bg-red-400':'bg-red-600 hover:bg-red-700'}`}>Reject</button>
           </div>

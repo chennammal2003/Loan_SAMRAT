@@ -43,6 +43,8 @@ import TieUpGate from './components/TieUpGate';
 import NbfcSelect from './pages/NbfcSelect';
 import AdminTieUps from './components/AdminTieUps';
 import RequireMerchantProfile from './components/RequireMerchantProfile';
+import NbfcMerchantsView from './components/NbfcMerchantsView';
+import NbfcPaymentTracker from './components/NbfcPaymentTracker';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -165,6 +167,8 @@ function App() {
             <Route path="/admin/product-loans" element={<AdminRoute><PageShell><AdminProductLoans /></PageShell></AdminRoute>} />
             <Route path="/admin/settings" element={<AdminRoute><PageShell><Settings role="admin" /></PageShell></AdminRoute>} />
             <Route path="/admin/tieups" element={<AdminRoute><PageShell><AdminTieUps /></PageShell></AdminRoute>} />
+            <Route path="/nbfc/merchants" element={<AdminRoute><PageShell><NbfcMerchantsView /></PageShell></AdminRoute>} />
+            <Route path="/nbfc/payment-tracker" element={<AdminRoute><PageShell><NbfcPaymentTracker /></PageShell></AdminRoute>} />
             {/* Merchant standalone pages (no dashboard shell) */}
             <Route
               path="/loans"

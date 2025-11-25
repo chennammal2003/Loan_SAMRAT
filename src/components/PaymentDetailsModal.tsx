@@ -764,14 +764,15 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadO
                               setActionModalIndex(i);
                               setActionModalPaidDate(r.paidDate || '');
                             }}
-                            disabled={r.status === 'Paid' || r.status === 'ECS Success' || r.status === 'Due Missed'}
-                            className={`px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white ${
-                              r.status === 'Paid' || r.status === 'ECS Success' || r.status === 'Due Missed'
-                                ? 'opacity-50 cursor-not-allowed'
-                                : 'hover:bg-blue-700'
+                            disabled={r.status === 'Paid' || r.status === 'ECS Success'}
+                            className={`px-3 py-1.5 text-sm rounded-md text-white font-medium ${
+                              r.status === 'Paid' || r.status === 'ECS Success'
+                                ? 'bg-gray-400 cursor-not-allowed opacity-50'
+                                : 'bg-blue-600 hover:bg-blue-700'
                             } transition-colors`}
+                            title={r.status === 'Paid' || r.status === 'ECS Success' ? 'Cannot edit paid EMIs' : 'Click to mark as paid or update status'}
                           >
-                            Mark Paid
+                            {r.status === 'Paid' ? '✓ Paid' : r.status === 'ECS Success' ? '✓ ECS Success' : 'Mark Paid'}
                           </button>
                         </td>
                       </>
@@ -801,11 +802,25 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadO
           <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 max-w-md w-full p-6">
             <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Mark EMI as Paid</h3>
             
+            {/* Current Status Info */}
+            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <p className="text-sm text-blue-700 dark:text-blue-300">
+                <strong>Current Status:</strong> {rows[actionModalIndex]?.status}
+              </p>
+              {(rows[actionModalIndex]?.status === 'Paid' || rows[actionModalIndex]?.status === 'ECS Success') && (
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">ℹ️ This EMI is already paid and cannot be edited.</p>
+              )}
+              {(rows[actionModalIndex]?.status === 'Due Missed' || rows[actionModalIndex]?.status === 'ECS Bounce') && (
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">✓ This EMI can be updated. Mark as paid or change status.</p>
+              )}
+            </div>
+            
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                  EMI: <span className="font-bold">{rows[actionModalIndex]?.monthLabel}</span> (Due: {rows[actionModalIndex]?.dueDateStr})
+                  EMI: <span className="font-bold">{rows[actionModalIndex]?.monthLabel}</span>
                 </label>
+                <p className="text-xs text-gray-600 dark:text-gray-400">Due: {rows[actionModalIndex]?.dueDateStr}</p>
               </div>
 
               <div>
@@ -822,25 +837,38 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadO
                   }}
                   className="w-full px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                 >
-                  <option value="Pending">Pending</option>
-                  <option value="Paid">Paid</option>
-                  <option value="ECS Success">ECS Success</option>
-                  <option value="ECS Bounce">ECS Bounce</option>
-                  <option value="Due Missed">Due Missed</option>
+                  <option value="Pending">Pending - Not yet paid</option>
+                  <option value="Paid">✓ Paid - Mark as manually paid</option>
+                  <option value="ECS Success">✓ ECS Success - Paid via ECS</option>
+                  <option value="ECS Bounce">⚠️ ECS Bounce - Payment failed</option>
+                  <option value="Due Missed">⚠️ Due Missed - Payment overdue</option>
                 </select>
-                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Change EMI status</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                  {rows[actionModalIndex]?.status === 'Paid' || rows[actionModalIndex]?.status === 'ECS Success' 
+                    ? '🔒 Read-only - Already paid' 
+                    : '✏️ Editable - Change the payment status'}
+                </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Enter Paid Date:</label>
+                <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Paid Date:</label>
                 <input
                   type="date"
                   value={actionModalPaidDate}
                   onChange={(e) => setActionModalPaidDate(e.target.value)}
-                  max={new Date().toISOString().split('T')[0]} // Can't select future dates
-                  className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  max={new Date().toISOString().split('T')[0]}
+                  disabled={rows[actionModalIndex]?.status === 'Paid' || rows[actionModalIndex]?.status === 'ECS Success'}
+                  className={`w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none ${
+                    rows[actionModalIndex]?.status === 'Paid' || rows[actionModalIndex]?.status === 'ECS Success'
+                      ? 'bg-gray-100 dark:bg-gray-800 cursor-not-allowed opacity-50'
+                      : 'bg-gray-50 dark:bg-gray-700'
+                  }`}
                 />
-                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Select the date when the EMI was paid</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                  {rows[actionModalIndex]?.status === 'Paid' || rows[actionModalIndex]?.status === 'ECS Success'
+                    ? 'Date is locked for paid EMIs'
+                    : 'Select when the payment was made'}
+                </p>
               </div>
 
               <div className="flex gap-3 pt-4">
@@ -859,9 +887,14 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadO
                       handleSavePaidDate(actionModalIndex, actionModalPaidDate);
                     }
                   }}
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                  disabled={rows[actionModalIndex]?.status === 'Paid' || rows[actionModalIndex]?.status === 'ECS Success'}
+                  className={`flex-1 px-4 py-2 rounded-lg transition-colors font-medium ${
+                    rows[actionModalIndex]?.status === 'Paid' || rows[actionModalIndex]?.status === 'ECS Success'
+                      ? 'bg-gray-400 text-gray-100 cursor-not-allowed opacity-50'
+                      : 'bg-green-600 text-white hover:bg-green-700'
+                  }`}
                 >
-                  Save & Mark Paid
+                  Save & Update
                 </button>
               </div>
             </div>

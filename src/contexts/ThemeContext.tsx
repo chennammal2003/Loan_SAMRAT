@@ -9,17 +9,34 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+// Initialize theme on load
+function initializeTheme(): Theme {
+  const saved = localStorage.getItem('theme');
+  if (saved === 'light' || saved === 'dark') return saved as Theme;
+  // Default to dark theme
+  return 'dark';
+}
+
+// Apply theme immediately
+function applyTheme(theme: Theme) {
+  const html = document.documentElement;
+  if (theme === 'dark') {
+    html.classList.add('dark');
+  } else {
+    html.classList.remove('dark');
+  }
+  localStorage.setItem('theme', theme);
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('theme');
-    if (saved === 'light' || saved === 'dark') return saved as Theme;
-    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    return prefersDark ? 'dark' : 'light';
+    const initial = initializeTheme();
+    applyTheme(initial);
+    return initial;
   });
 
   useEffect(() => {
-    localStorage.setItem('theme', theme);
-    document.documentElement.classList.toggle('dark', theme === 'dark');
+    applyTheme(theme);
   }, [theme]);
 
   useEffect(() => {

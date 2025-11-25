@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Eye, Download, Lock, Calendar } from 'lucide-react';
+import { Eye, Download, Lock, Calendar, History } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import DocsModal from './DocsModal';
 import { useAuth } from '../contexts/AuthContext';
@@ -508,7 +508,7 @@ export default function MerchantProductLoans() {
                         >
                           {loan.status}
                         </span>
-                        {(loan.status === 'Loan Disbursed' || (loan as any).product_delivery_status !== 'Product Delivered') && !loan.product_delivered_date && (
+                        {loan.status === 'Loan Disbursed' && !loan.product_delivered_date && (
                           <button
                             onClick={() => {
                               setDeliveryModalLoan(loan);
@@ -597,7 +597,15 @@ export default function MerchantProductLoans() {
       {selectedLoan && (
         <ProductLoanDetailsModal
           loan={selectedLoan}
-          onClose={() => setSelectedLoan(null)}
+          onClose={() => {
+            setSelectedLoan(null);
+            // Refresh loans after EMI updates
+            setTimeout(() => fetchLoans(), 500);
+          }}
+          onEMIUpdated={() => {
+            // Refresh loans when EMI is marked as paid
+            fetchLoans();
+          }}
         />
       )}
 
@@ -729,8 +737,22 @@ function ProductInfoModal({ loan, onClose }: { loan: ProductLoan; onClose: () =>
   );
 }
 
-// Product Loan Details Modal for Merchant
-function ProductLoanDetailsModal({ loan, onClose }: { loan: ProductLoan; onClose: () => void }) {
+// Product Loan Details Modal for Merchant with Database-Driven Tracking
+interface StatusHistory {
+  id: string;
+  loan_id: string;
+  old_status: string | null;
+  new_status: string;
+  changed_at: string;
+  notes?: string | null;
+  changed_by?: string | null;
+}
+
+function ProductLoanDetailsModal({ loan, onClose, onEMIUpdated }: { loan: ProductLoan; onClose: () => void; onEMIUpdated?: () => void }) {
+  const [statusHistory, setStatusHistory] = useState<StatusHistory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const maskEmail = (email: string) => {
     const [local, domain] = email.split('@');
     if (local.length <= 3) return `${local[0]}***@${domain}`;
@@ -742,11 +764,95 @@ function ProductLoanDetailsModal({ loan, onClose }: { loan: ProductLoan; onClose
     return `*******${mobile.slice(-2)}`;
   };
 
+  const getStatusColor = (status: string) => {
+    const statusLower = status?.toLowerCase() || '';
+    if (statusLower.includes('delivered') || statusLower.includes('accepted') || statusLower.includes('verified') || statusLower.includes('disbursed')) return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+    if (statusLower.includes('pending')) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400';
+    if (statusLower.includes('rejected') || statusLower.includes('failed')) return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
+    return 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300';
+  };
+
+  useEffect(() => {
+    const fetchStatusHistory = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Fetch status history from the tracking table
+        const { data: history, error: historyError } = await supabase
+          .from('status_history')
+          .select('*')
+          .eq('loan_id', loan.id)
+          .order('changed_at', { ascending: true });
+
+        if (historyError) {
+          console.error('Status history fetch error:', historyError);
+          // If status_history table doesn't exist, just show current status
+          setStatusHistory([
+            {
+              id: loan.id,
+              loan_id: loan.id,
+              old_status: null,
+              new_status: loan.status,
+              changed_at: loan.created_at || new Date().toISOString(),
+              notes: 'Loan created',
+              changed_by: null,
+            },
+          ]);
+        } else {
+          setStatusHistory(history || []);
+        }
+      } catch (err) {
+        console.error('Error fetching status history:', err);
+        // Fallback: show current status
+        setStatusHistory([
+          {
+            id: loan.id,
+            loan_id: loan.id,
+            old_status: null,
+            new_status: loan.status,
+            changed_at: loan.created_at || new Date().toISOString(),
+            notes: 'Loan created',
+            changed_by: null,
+          },
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStatusHistory();
+
+    // Subscribe to real-time updates
+    const statusChannel = supabase
+      .channel(`status-history-${loan.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'status_history', filter: `loan_id=eq.${loan.id}` },
+        () => fetchStatusHistory()
+      )
+      .subscribe();
+
+    const productLoansChannel = supabase
+      .channel(`product-loans-${loan.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'product_loans', filter: `id=eq.${loan.id}` },
+        () => fetchStatusHistory()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(statusChannel);
+      supabase.removeChannel(productLoansChannel);
+    };
+  }, [loan.id]);
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center p-6 border-b border-slate-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800">
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Product Loan Details</h2>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Product Loan Details & Real-time Tracking</h2>
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
@@ -755,6 +861,7 @@ function ProductLoanDetailsModal({ loan, onClose }: { loan: ProductLoan; onClose
           </button>
         </div>
         <div className="p-6 space-y-6">
+          {/* Basic Information */}
           <div className="grid grid-cols-2 gap-6">
             <div>
               <h3 className="font-semibold text-slate-900 dark:text-white mb-3">Applicant Information</h3>
@@ -777,7 +884,7 @@ function ProductLoanDetailsModal({ loan, onClose }: { loan: ProductLoan; onClose
                 <p><span className="text-slate-600 dark:text-gray-400">Loan Amount:</span> <span className="font-medium">₹{loan.loan_amount.toLocaleString('en-IN')}</span></p>
                 <p><span className="text-slate-600 dark:text-gray-400">Tenure:</span> <span className="font-medium">{loan.tenure} months</span></p>
                 <p><span className="text-slate-600 dark:text-gray-400">Processing Fee:</span> <span className="font-medium">₹{loan.processing_fee.toLocaleString('en-IN')}</span></p>
-                <p><span className="text-slate-600 dark:text-gray-400">Status:</span> <span className="font-medium">{loan.status}</span></p>
+                <p><span className="text-slate-600 dark:text-gray-400">Status:</span> <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(loan.status)}`}>{loan.status}</span></p>
                 {(loan as any).referral_code && (
                   <p><span className="text-slate-600 dark:text-gray-400">Referral Code:</span> <span className="font-medium">{(loan as any).referral_code}</span></p>
                 )}
@@ -800,6 +907,165 @@ function ProductLoanDetailsModal({ loan, onClose }: { loan: ProductLoan; onClose
                 <p><span className="text-slate-600 dark:text-gray-400">Last Updated:</span> <span className="font-medium">{new Date(loan.updated_at).toLocaleString('en-IN')}</span></p>
               </div>
             </div>
+          </div>
+
+          <div className="border-t border-slate-200 dark:border-gray-700 pt-6">
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            ) : error ? (
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-sm">
+                <p className="text-red-700 dark:text-red-400">⚠️ {error}</p>
+              </div>
+            ) : (
+              <>
+                {/* Status Timeline - Beautiful Vertical Design */}
+                <div>
+                  <h3 className="font-semibold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
+                    <History size={18} className="text-blue-600" />
+                    📋 Loan Status History
+                  </h3>
+                  
+                  {/* Timeline Steps */}
+                  <div className="space-y-6 pl-8">
+                    {[
+                      { status: 'Accepted', label: 'Accepted' },
+                      { status: 'Verified', label: 'Verified' },
+                      { status: 'Loan Disbursed', label: 'Loan Disbursed' },
+                      { status: 'Product Delivered', label: 'Product Delivered' },
+                    ].map((step, index) => {
+                      const statusEntry = statusHistory.find(h => h.new_status === step.status);
+                      const isCompleted = statusHistory.some(h => h.new_status === step.status);
+                      const isCurrent = loan.status === step.status || (loan.status === 'Delivered' && step.status === 'Product Delivered');
+                      
+                      let stepStatus = 'pending';
+                      if (isCompleted || loan.status === 'Delivered') stepStatus = 'completed';
+                      if (isCurrent && !isCompleted && loan.status !== 'Delivered') stepStatus = 'current';
+
+                      return (
+                        <div key={step.status} className="relative">
+                          {/* Vertical line connector */}
+                          {index < 3 && (
+                            <div
+                              className={`absolute left-[-30px] top-12 w-1 h-12 ${
+                                stepStatus === 'completed' ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600'
+                              }`}
+                            />
+                          )}
+
+                          {/* Status Circle and Content */}
+                          <div className="flex items-start gap-4">
+                            {/* Status Icon */}
+                            <div className="flex-shrink-0 relative">
+                              {stepStatus === 'completed' ? (
+                                <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0 shadow-md">
+                                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                </div>
+                              ) : stepStatus === 'current' ? (
+                                <div className="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 shadow-md animate-pulse">
+                                  <div className="w-2 h-2 rounded-full bg-white"></div>
+                                </div>
+                              ) : (
+                                <div className="w-12 h-12 rounded-full bg-slate-300 dark:bg-slate-600 flex items-center justify-center flex-shrink-0">
+                                  <div className="w-4 h-4 rounded-full bg-slate-400 dark:bg-slate-500"></div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-grow pt-1">
+                              <div className="flex items-center justify-between">
+                                <h4
+                                  className={`text-sm font-semibold ${
+                                    stepStatus === 'completed'
+                                      ? 'text-green-700 dark:text-green-400'
+                                      : stepStatus === 'current'
+                                      ? 'text-blue-700 dark:text-blue-400'
+                                      : 'text-slate-500 dark:text-slate-400'
+                                  }`}
+                                >
+                                  {step.label}
+                                </h4>
+                                {statusEntry && (
+                                  <span className="text-xs text-slate-600 dark:text-gray-400 font-medium">
+                                    {new Date(statusEntry.changed_at).toLocaleDateString('en-IN')}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Status Badge */}
+                              <div className="mt-1">
+                                <span
+                                  className={`inline-block text-xs font-medium px-2 py-1 rounded ${
+                                    stepStatus === 'completed'
+                                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                      : stepStatus === 'current'
+                                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                                  }`}
+                                >
+                                  {stepStatus === 'completed' && 'Completed'}
+                                  {stepStatus === 'current' && 'In Progress'}
+                                  {stepStatus === 'pending' && 'Pending'}
+                                </span>
+                              </div>
+
+                              {/* Notes */}
+                              {statusEntry?.notes && (
+                                <p className="text-sm text-slate-700 dark:text-gray-300 mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                                  📝 {statusEntry.notes}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Delivered Status Section */}
+                  {(loan.status === 'Product Delivered' || loan.status === 'Delivered') && (
+                    <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                          <p className="text-sm text-green-700 dark:text-green-400 font-medium">Status</p>
+                          <p className="text-lg font-semibold text-green-800 dark:text-green-300 mt-1">Delivered</p>
+                        </div>
+                        {loan.product_delivered_date && (
+                          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                            <p className="text-sm text-blue-700 dark:text-blue-400 font-medium">📅 Delivery Date</p>
+                            <p className="text-lg font-semibold text-blue-800 dark:text-blue-300 mt-1">
+                              {new Date(loan.product_delivered_date).toLocaleDateString('en-IN')}
+                            </p>
+                          </div>
+                        )}
+                        <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+                          <p className="text-sm text-purple-700 dark:text-purple-400 font-medium">📄 Documents</p>
+                          <button
+                            className="mt-2 px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded transition-colors"
+                          >
+                            View Docs
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Rejected State */}
+                  {loan.status === 'Rejected' && (
+                    <div className="mt-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                      <p className="text-red-700 dark:text-red-400 font-semibold">❌ Application Rejected</p>
+                      <p className="text-red-600 dark:text-red-300 text-sm mt-1">
+                        This application has been rejected and cannot proceed further.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
         <div className="p-6 border-t border-slate-200 dark:border-gray-700 flex justify-end">
