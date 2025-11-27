@@ -82,43 +82,43 @@ export default function FinanceTenurePage() {
 
   return (
     <div className="max-w-xl mx-auto p-6">
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow p-6">
-        <h1 className="text-xl font-bold mb-1">Select Tenure</h1>
-        <p className="text-sm text-gray-500 mb-4">Choose your preferred tenure</p>
-        <div className="text-sm text-gray-600 mb-3">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow dark:shadow-lg p-6">
+        <h1 className="text-xl font-bold mb-1 text-gray-900 dark:text-white">Select Tenure</h1>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Choose your preferred tenure</p>
+        <div className="text-sm text-gray-600 dark:text-gray-300 mb-3">
           Product Price: ₹{grossAmount.toLocaleString('en-IN')} · Interest: {annualRate}% p.a.
         </div>
 
         <div className="mb-4">
-          <label className="block text-sm text-gray-700 mb-1">Down Payment Amount</label>
+          <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">Down Payment Amount</label>
           <input
             type="number"
             value={downPayment}
             onChange={(e) => setDownPayment(e.target.value)}
             placeholder="Enter down payment"
-            className="w-full px-3 py-2 border rounded"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
             min={0}
             max={grossAmount}
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
             EMI will be calculated on principal = product price − down payment.
           </p>
         </div>
 
-        <div className="text-sm text-gray-700 mb-4">
+        <div className="text-sm text-gray-700 dark:text-gray-300 mb-4">
           Principal after down payment: ₹{principal.principal.toLocaleString('en-IN')}
         </div>
 
         {loading ? (
-          <div className="text-sm text-gray-500">Loading finance options…</div>
+          <div className="text-sm text-gray-600 dark:text-gray-400">Loading finance options…</div>
         ) : (
           <>
             <div className="mb-4">
-              <label className="block text-sm text-gray-700 mb-1">Select Tenure (months)</label>
+              <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">Select Tenure (months)</label>
               <select
                 value={selectedTenure || ''}
                 onChange={(e) => setSelectedTenure(e.target.value ? Number(e.target.value) : '')}
-                className="w-full px-3 py-2 border rounded"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
               >
                 <option value="">Select tenure</option>
                 {tenureOptions.map((m) => (
@@ -129,29 +129,29 @@ export default function FinanceTenurePage() {
 
             {selectedTenure && hasDownPaymentInput ? (
               <div className="overflow-x-auto mb-4">
-                <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
-                  <thead className="bg-gray-50">
+                <table className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
+                  <thead className="bg-gray-100 dark:bg-gray-700">
                     <tr>
-                      <th className="px-3 py-2 text-left">Tenure</th>
-                      <th className="px-3 py-2 text-right">Principal (₹)</th>
-                      <th className="px-3 py-2 text-right">EMI / month (₹)</th>
-                      <th className="px-3 py-2 text-right">Total Payable (₹)</th>
-                      <th className="px-3 py-2 text-right">Total Interest (₹)</th>
+                      <th className="px-3 py-2 text-left text-gray-900 dark:text-gray-100">Tenure</th>
+                      <th className="px-3 py-2 text-right text-gray-900 dark:text-gray-100">Principal (₹)</th>
+                      <th className="px-3 py-2 text-right text-gray-900 dark:text-gray-100">EMI / month (₹)</th>
+                      <th className="px-3 py-2 text-right text-gray-900 dark:text-gray-100">Total Payable (₹)</th>
+                      <th className="px-3 py-2 text-right text-gray-900 dark:text-gray-100">Total Interest (₹)</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="bg-amber-50">
-                      <td className="px-3 py-2">{selectedTenure} Months</td>
-                      <td className="px-3 py-2 text-right">{principal.principal.toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-2 text-right">{currentEmi.toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-2 text-right">{currentTotal.toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-2 text-right">{currentInterest.toLocaleString('en-IN')}</td>
+                    <tr className="bg-amber-50 dark:bg-amber-900/20">
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-100">{selectedTenure} Months</td>
+                      <td className="px-3 py-2 text-right text-gray-900 dark:text-gray-100">{principal.principal.toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-2 text-right text-gray-900 dark:text-gray-100">{currentEmi.toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-2 text-right text-gray-900 dark:text-gray-100">{currentTotal.toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-2 text-right text-gray-900 dark:text-gray-100">{currentInterest.toLocaleString('en-IN')}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
             ) : (
-              <p className="text-sm text-gray-500 mb-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                 Enter down payment and select a tenure to see the EMI breakdown.
               </p>
             )}

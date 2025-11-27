@@ -75,13 +75,30 @@ export default function AdminProductLoans() {
     try {
       setLoading(true);
       
-      // Fetch all product loans
-      const { data: productLoansData, error: productLoansError } = await supabase
-        .from('product_loans')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // STEP 1: Get all NBFC tie-ups to identify tied merchants
+      const { data: tieupData, error: tieupError } = await supabase
+        .from('nbfc_tieups')
+        .select('merchant_id');
 
-      if (productLoansError) throw productLoansError;
+      if (tieupError) throw tieupError;
+
+      // Extract unique merchant IDs that have NBFC tie-ups
+      const tiedMerchantIds = Array.from(
+        new Set((tieupData || []).map((t: any) => t.merchant_id))
+      );
+
+      // STEP 2: Fetch product loans ONLY for tied merchants
+      let productLoansData: any[] = [];
+      if (tiedMerchantIds.length > 0) {
+        const { data, error } = await supabase
+          .from('product_loans')
+          .select('*')
+          .in('merchant_id', tiedMerchantIds)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        productLoansData = data || [];
+      }
 
       // Fetch products for additional info (SKU, etc.)
       const productIds = productLoansData?.filter(pl => pl.product_id).map(pl => pl.product_id) || [];
@@ -113,7 +130,7 @@ export default function AdminProductLoans() {
           .from('loan_documents')
           .select('loan_id')
           .in('loan_id', loanIds)
-          .eq('loan_type', 'product');
+          .or('loan_type.eq.product,loan_type.is.null');
         if (docsError) throw docsError;
         docsSet = new Set((docsData || []).map(d => d.loan_id));
       }

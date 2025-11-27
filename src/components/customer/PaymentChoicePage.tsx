@@ -15,13 +15,13 @@ export default function PaymentChoicePage() {
 
   return (
     <div className="max-w-md mx-auto p-6">
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow p-6">
-        <h1 className="text-xl font-bold mb-1">Choose Payment Method</h1>
-        <p className="text-sm text-gray-500 mb-5">How would you like to pay for this item?</p>
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow dark:shadow-lg p-6">
+        <h1 className="text-xl font-bold mb-1 text-gray-900 dark:text-white">Choose Payment Method</h1>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-5">How would you like to pay for this item?</p>
 
         <div className="space-y-3">
           <button
-            className="w-full flex items-center justify-between px-4 py-3 rounded-lg bg-green-600 hover:bg-green-700 text-white"
+            className="w-full flex items-center justify-between px-4 py-3 rounded-lg bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white"
             onClick={() => navigate('/customer/checkout', { state: { payType: 'online' } })}
           >
             <span className="flex items-center gap-3"><CreditCard className="w-5 h-5"/> Pay Now</span>
@@ -29,7 +29,7 @@ export default function PaymentChoicePage() {
           </button>
 
           <button
-            className="w-full flex items-center justify-between px-4 py-3 rounded-lg bg-purple-600 hover:bg-purple-700 text-white"
+            className="w-full flex items-center justify-between px-4 py-3 rounded-lg bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-600 text-white"
             onClick={() => navigate('/customer/finance-tenure', { state: { price, subtotal, merchantId, productId, productName, productImage, productCategory } })}
           >
             <span className="flex items-center gap-3"><Landmark className="w-5 h-5"/> Finance Option</span>

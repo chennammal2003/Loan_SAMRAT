@@ -161,7 +161,7 @@ export default function MerchantProfilePanel({ open, onClose }: MerchantProfileP
         );
       if (error) throw error;
       
-      // Create notification for Super Admin on every save and ensure merchant is inactive until approval
+      // Create notification for Super Admin and handle status based on whether this is new or edit
       {
         await createProfileSubmissionNotification({
           type: 'merchant_profile_submitted',
@@ -176,18 +176,20 @@ export default function MerchantProfilePanel({ open, onClose }: MerchantProfileP
           }
         });
 
-        // CRITICAL: Ensure user is set to inactive after profile submission
-        // This is a failsafe in case the signup process didn't set it correctly
-        const { error: inactiveError } = await supabase
-          .from('user_profiles')
-          .update({ 
-            is_active: false,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', form.merchant_id);
+        // CRITICAL: Only set user to inactive if this is a NEW profile submission
+        // If they already have an approved account, editing profile should NOT reset their status
+        if (isNewProfile) {
+          const { error: inactiveError } = await supabase
+            .from('user_profiles')
+            .update({ 
+              is_active: false,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', form.merchant_id);
 
-        if (inactiveError) {
-          console.error('Error setting merchant to inactive after profile submission:', inactiveError);
+          if (inactiveError) {
+            console.error('Error setting merchant to inactive after profile submission:', inactiveError);
+          }
         }
       }
       

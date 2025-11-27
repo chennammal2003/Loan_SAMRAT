@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, RefreshCw } from 'lucide-react';
+import { X, RefreshCw, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import DocsModal from './DocsModal';
 
 export type TrackerLoan = {
   id: string;
+  userId?: string;
   applicationNumber?: string;
   fullName: string;
   loanAmount: number;
@@ -41,6 +43,7 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadO
   const [actionModalIndex, setActionModalIndex] = useState<number | null>(null);
   const [actionModalPaidDate, setActionModalPaidDate] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showDocs, setShowDocs] = useState(false);
 
   // Determine if editing should be allowed based on user role and prop
   const isAdmin = profile?.role === 'admin';
@@ -583,6 +586,14 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadO
           </div>
           <div className="flex items-center gap-2">
             <button 
+              onClick={() => setShowDocs(true)}
+              title="View uploaded documents"
+              className="flex items-center gap-2 px-3 py-2 rounded bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/60 transition-colors text-sm font-medium"
+            >
+              <FileText className="w-4 h-4" />
+              Docs
+            </button>
+            <button 
               onClick={handleManualRefresh} 
               disabled={isRefreshing}
               title="Refresh payment data"
@@ -900,6 +911,16 @@ export default function PaymentDetailsModal({ loan, onClose, readOnly: propReadO
             </div>
           </div>
         </div>
+      )}
+
+      {/* Documents Modal */}
+      {showDocs && (
+        <DocsModal
+          loanId={loan.id}
+          fullName={loan.fullName}
+          onClose={() => setShowDocs(false)}
+          loanType="product"
+        />
       )}
     </div>
   );

@@ -347,6 +347,7 @@ export default function MerchantProductLoans() {
             <option value="Accepted">Accepted</option>
             <option value="Rejected">Rejected</option>
             <option value="Loan Disbursed">Disbursed</option>
+            <option value="Delivered">Delivered</option>
           </select>
           <select
             value={refFilter}
@@ -924,7 +925,7 @@ function ProductLoanDetailsModal({ loan, onClose, onEMIUpdated }: { loan: Produc
                 <div>
                   <h3 className="font-semibold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
                     <History size={18} className="text-blue-600" />
-                    📋 Loan Status History
+                    📋 Loan Status 
                   </h3>
                   
                   {/* Timeline Steps */}

@@ -108,7 +108,7 @@ export default function CustomerProductLoans() {
             return (
               <div
                 key={loan.id}
-                className="flex items-center gap-4 rounded-xl border border-gray-200 bg-white shadow-sm p-4"
+                className="flex items-center gap-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm dark:shadow-lg p-4"
               >
                 <img
                   src={loan.product_image_url || '/placeholder-product.png'}
@@ -122,7 +122,7 @@ export default function CustomerProductLoans() {
                   <div className="flex items-center justify-between mb-1">
                     <button
                       type="button"
-                      className="font-semibold text-blue-600 hover:underline truncate text-left"
+                      className="font-semibold text-blue-600 dark:text-blue-400 hover:underline truncate text-left"
                       title="View loan details"
                       onClick={() => openLoanDetails(loan.id)}
                     >
@@ -132,21 +132,21 @@ export default function CustomerProductLoans() {
                       {badge.label}
                     </span>
                   </div>
-                  <p className="text-xs text-purple-700 mb-1">Product Purchase</p>
-                  <div className="grid grid-cols-3 gap-2 text-xs text-gray-600">
+                  <p className="text-xs text-purple-700 dark:text-purple-400 mb-1">Product Purchase</p>
+                  <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 dark:text-gray-400">
                     <div>
-                      <p className="text-gray-500">Amount</p>
-                      <p className="font-semibold text-gray-900">
+                      <p className="text-gray-500 dark:text-gray-500">Amount</p>
+                      <p className="font-semibold text-gray-900 dark:text-white">
                         ₹{loan.loan_amount.toLocaleString('en-IN')}
                       </p>
                     </div>
                     <div>
-                      <p className="text-gray-500">Tenure</p>
-                      <p className="font-semibold text-gray-900">{loan.tenure} months</p>
+                      <p className="text-gray-500 dark:text-gray-500">Tenure</p>
+                      <p className="font-semibold text-gray-900 dark:text-white">{loan.tenure} months</p>
                     </div>
                     <div>
-                      <p className="text-gray-500">Applied</p>
-                      <p className="font-semibold text-gray-900">
+                      <p className="text-gray-500 dark:text-gray-500">Applied</p>
+                      <p className="font-semibold text-gray-900 dark:text-white">
                         {new Date(loan.created_at).toLocaleDateString('en-IN')}
                       </p>
                     </div>
@@ -159,50 +159,53 @@ export default function CustomerProductLoans() {
       )}
 
       {selectedLoan && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-40">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center p-4 border-b border-gray-200 sticky top-0 bg-white">
-              <h2 className="text-lg font-bold text-gray-900">Loan Details</h2>
+        <div className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-40">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl dark:shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Loan Details</h2>
               <button
                 onClick={() => setSelectedLoan(null)}
-                className="text-gray-500 hover:text-gray-700"
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
               >
                 ✕
               </button>
             </div>
-            <div className="p-4 space-y-4 text-sm text-gray-800">
+            <div className="p-4 space-y-4 text-sm text-gray-800 dark:text-gray-200">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <h3 className="font-semibold mb-2">Applicant</h3>
-                  <p><span className="text-gray-500">Name: </span><span className="font-medium">{selectedLoan.first_name} {selectedLoan.last_name}</span></p>
-                  <p><span className="text-gray-500">Email: </span><span className="font-medium">{selectedLoan.email_id}</span></p>
-                  <p><span className="text-gray-500">Mobile: </span><span className="font-medium">{selectedLoan.mobile_primary}</span></p>
-                  <p><span className="text-gray-500">Address: </span><span className="font-medium">{selectedLoan.address}</span></p>
+                  <h3 className="font-semibold mb-2 text-gray-900 dark:text-white">Applicant</h3>
+                  <p><span className="text-gray-600 dark:text-gray-400">Name: </span><span className="font-medium text-gray-900 dark:text-white">{selectedLoan.first_name} {selectedLoan.last_name}</span></p>
+                  <p><span className="text-gray-600 dark:text-gray-400">Email: </span><span className="font-medium text-gray-900 dark:text-white">{selectedLoan.email_id}</span></p>
+                  <p><span className="text-gray-600 dark:text-gray-400">Mobile: </span><span className="font-medium text-gray-900 dark:text-white">{selectedLoan.mobile_primary}</span></p>
+                  <p><span className="text-gray-600 dark:text-gray-400">Address: </span><span className="font-medium text-gray-900 dark:text-white">{selectedLoan.address}</span></p>
                 </div>
                 <div>
-                  <h3 className="font-semibold mb-2">Loan</h3>
-                  <p><span className="text-gray-500">Loan Amount: </span><span className="font-medium">₹{selectedLoan.loan_amount.toLocaleString('en-IN')}</span></p>
-                  <p><span className="text-gray-500">Tenure: </span><span className="font-medium">{selectedLoan.tenure} months</span></p>
+                  <h3 className="font-semibold mb-2 text-gray-900 dark:text-white">Loan</h3>
+                  <p><span className="text-gray-600 dark:text-gray-400">Loan Amount: </span><span className="font-medium text-gray-900 dark:text-white">₹{selectedLoan.loan_amount.toLocaleString('en-IN')}</span></p>
+                  <p><span className="text-gray-600 dark:text-gray-400">Tenure: </span><span className="font-medium text-gray-900 dark:text-white">{selectedLoan.tenure} months</span></p>
                   {typeof selectedLoan.processing_fee === 'number' && (
-                    <p><span className="text-gray-500">Processing Fee: </span><span className="font-medium">₹{selectedLoan.processing_fee.toLocaleString('en-IN')}</span></p>
+                    <p><span className="text-gray-600 dark:text-gray-400">Processing Fee: </span><span className="font-medium text-gray-900 dark:text-white">₹{selectedLoan.processing_fee.toLocaleString('en-IN')}</span></p>
                   )}
-                  <p><span className="text-gray-500">Status: </span><span className="font-medium">{selectedLoan.status}</span></p>
-                  <p><span className="text-gray-500">Applied On: </span><span className="font-medium">{new Date(selectedLoan.created_at).toLocaleString('en-IN')}</span></p>
+                  <p><span className="text-gray-600 dark:text-gray-400">Status: </span><span className="font-medium text-gray-900 dark:text-white">{selectedLoan.status}</span></p>
+                  <p><span className="text-gray-600 dark:text-gray-400">Applied On: </span><span className="font-medium text-gray-900 dark:text-white">{new Date(selectedLoan.created_at).toLocaleString('en-IN')}</span></p>
                 </div>
                 <div>
-                  <h3 className="font-semibold mb-2">Product</h3>
-                  <p><span className="text-gray-500">Name: </span><span className="font-medium">{selectedLoan.product_name}</span></p>
-                  <p><span className="text-gray-500">Price: </span><span className="font-medium">₹{selectedLoan.product_price.toLocaleString('en-IN')}</span></p>
+                  <h3 className="font-semibold mb-2 text-gray-900 dark:text-white">Product</h3>
+                  <p><span className="text-gray-600 dark:text-gray-400">Name: </span><span className="font-medium text-gray-900 dark:text-white">{selectedLoan.product_name}</span></p>
+                  <p><span className="text-gray-600 dark:text-gray-400">Price: </span><span className="font-medium text-gray-900 dark:text-white">₹{selectedLoan.product_price.toLocaleString('en-IN')}</span></p>
                   {selectedLoan.product_category && (
-                    <p><span className="text-gray-500">Category: </span><span className="font-medium">{selectedLoan.product_category}</span></p>
+                    <p><span className="text-gray-600 dark:text-gray-400">Category: </span><span className="font-medium text-gray-900 dark:text-white">{selectedLoan.product_category}</span></p>
                   )}
                 </div>
               </div>
-              <div className="pt-2 border-t border-gray-200 flex justify-between items-center">
-                <p className="text-xs text-gray-500">These are the details you submitted with your loan application.</p>
+              <div className="pt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                <p className="text-xs text-gray-600 dark:text-gray-400">These are the details you submitted with your loan application.</p>
                 <button
-                  className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm"
-                  onClick={() => setDocsFor(selectedLoan)}
+                  className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white text-sm"
+                  onClick={() => {
+                    console.log('Opening docs for loan:', selectedLoan.id, 'Name:', selectedLoan.first_name, selectedLoan.last_name);
+                    setDocsFor(selectedLoan);
+                  }}
                 >
                   View Documents
                 </button>

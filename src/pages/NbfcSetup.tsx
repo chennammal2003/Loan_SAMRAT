@@ -242,13 +242,17 @@ export default function NbfcSetup({ embedded = false }: { embedded?: boolean }) 
       } as const;
 
       // Upsert NBFC profile (supports both first-time create and edits)
-      const { error } = await supabase
+      const { error, data } = await supabase
         .from('nbfc_profiles')
         .upsert(payload, { onConflict: 'nbfc_id' });
 
       if (error) throw error;
 
-      // Whenever NBFC profile is saved, send notification and mark admin inactive
+      // Check if this was a new profile submission (first time)
+      const isNewProfile = !data || (Array.isArray(data) && data.length === 0) || 
+        (data && typeof data === 'object' && Object.keys(data).length === 0);
+
+      // Whenever NBFC profile is saved, send notification
       try {
         await createProfileSubmissionNotification({
           type: 'nbfc_profile_submitted',
@@ -267,20 +271,23 @@ export default function NbfcSetup({ embedded = false }: { embedded?: boolean }) 
         console.error('Failed to create NBFC profile submission notification', notifyErr);
       }
 
-      // Ensure admin is set inactive until Super Admin approval
-      try {
-        const { error: inactiveError } = await supabase
-          .from('user_profiles')
-          .update({
-            is_active: false,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', profile.id);
-        if (inactiveError) {
-          console.error('Error setting admin to inactive after NBFC profile save:', inactiveError);
+      // CRITICAL: Only set admin to inactive if this is a NEW profile submission
+      // If they already have an approved account, editing profile should NOT reset their status
+      if (isNewProfile) {
+        try {
+          const { error: inactiveError } = await supabase
+            .from('user_profiles')
+            .update({
+              is_active: false,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', profile.id);
+          if (inactiveError) {
+            console.error('Error setting admin to inactive after NBFC profile save:', inactiveError);
+          }
+        } catch (inactiveOuterErr) {
+          console.error('Unexpected error while setting admin inactive after NBFC profile save:', inactiveOuterErr);
         }
-      } catch (inactiveOuterErr) {
-        console.error('Unexpected error while setting admin inactive after NBFC profile save:', inactiveOuterErr);
       }
 
       // Refresh profile so NbfcProfileGate sees is_active=false

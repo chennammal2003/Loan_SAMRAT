@@ -111,8 +111,8 @@ export default function ProductDetailPage() {
   if (error || !row) {
     return (
       <div className="p-6">
-        <div className="bg-white dark:bg-gray-900 rounded-xl p-6 shadow">
-          <div className="text-red-600">{error || 'Product not found'}</div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow dark:shadow-lg">
+          <div className="text-red-600 dark:text-red-400">{error || 'Product not found'}</div>
         </div>
       </div>
     );
@@ -120,76 +120,76 @@ export default function ProductDetailPage() {
 
   return (
     <div className="space-y-6 p-4 md:p-6">
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow p-5">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow dark:shadow-lg p-5">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{row.name}</h1>
-        <p className="text-gray-500 dark:text-gray-300">{row.category}</p>
+        <p className="text-gray-600 dark:text-gray-400">{row.category}</p>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-gray-900 rounded-xl shadow overflow-hidden">
-          <div className="aspect-[4/3] bg-gray-50 dark:bg-gray-800">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow dark:shadow-lg overflow-hidden">
+          <div className="aspect-[4/3] bg-gray-100 dark:bg-gray-700">
             {row.image_url ? (
               <img src={row.image_url} alt={row.name} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>
+              <div className="w-full h-full flex items-center justify-center text-gray-400 dark:text-gray-600">No Image</div>
             )}
           </div>
         </div>
 
         <div className="space-y-4">
-          <div className="bg-white dark:bg-gray-900 rounded-xl p-5 shadow space-y-3">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow dark:shadow-lg space-y-3">
             <div className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-amber-600" />
-              <h3 className="font-semibold">Specifications</h3>
+              <h3 className="font-semibold text-gray-900 dark:text-white">Specifications</h3>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="p-3 rounded-lg border">Purity <div className="font-semibold">{row.purity}</div></div>
-              <div className="p-3 rounded-lg border">Weight <div className="font-semibold">{row.weight ?? 0}g</div></div>
-              <div className="p-3 rounded-lg border">Stock <div className={`font-semibold ${isInStock ? 'text-green-600' : 'text-red-600'}`}>{row.stock_qty ?? 0}</div></div>
-              <div className="p-3 rounded-lg border">Metal <div className="font-semibold">{row.metal_type || '—'}</div></div>
-              <div className="p-3 rounded-lg border">Gemstone <div className="font-semibold">{row.gemstone || '—'}</div></div>
-              <div className="p-3 rounded-lg border">Making Charges <div className="font-semibold">
+              <div className="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">Purity <div className="font-semibold">{row.purity}</div></div>
+              <div className="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">Weight <div className="font-semibold">{row.weight ?? 0}g</div></div>
+              <div className="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">Stock <div className={`font-semibold ${isInStock ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{row.stock_qty ?? 0}</div></div>
+              <div className="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">Metal <div className="font-semibold">{row.metal_type || '—'}</div></div>
+              <div className="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">Gemstone <div className="font-semibold">{row.gemstone || '—'}</div></div>
+              <div className="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">Making Charges <div className="font-semibold">
                 ₹{makingCharges.toLocaleString('en-IN')}
               </div></div>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-gray-900 rounded-xl p-5 shadow space-y-3">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow dark:shadow-lg space-y-3">
             {dp > 0 ? (
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="line-through text-gray-400">₹{basePrice.toLocaleString('en-IN')}</span>
-                  <span className="text-green-600 font-semibold">Save ₹{(basePrice - discountedPrice).toLocaleString('en-IN')}</span>
+                  <span className="line-through text-gray-400 dark:text-gray-600">₹{basePrice.toLocaleString('en-IN')}</span>
+                  <span className="text-green-600 dark:text-green-400 font-semibold">Save ₹{(basePrice - discountedPrice).toLocaleString('en-IN')}</span>
                 </div>
-                <div className="text-2xl font-bold">₹{discountedPrice.toLocaleString('en-IN')}</div>
+                <div className="text-2xl font-bold text-gray-900 dark:text-white">₹{discountedPrice.toLocaleString('en-IN')}</div>
               </div>
             ) : (
-              <div className="text-2xl font-bold">₹{basePrice.toLocaleString('en-IN')}</div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">₹{basePrice.toLocaleString('en-IN')}</div>
             )}
 
             <div className="grid grid-cols-2 gap-3">
-              <button onClick={handleAddToCart} disabled={!isInStock} className={`px-4 py-3 rounded-lg font-semibold ${isInStock ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-200 text-gray-400'}`}>Add to Cart</button>
-              <button onClick={handleBuyNow} disabled={!isInStock} className={`px-4 py-3 rounded-lg font-semibold ${isInStock ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-400'}`}>
+              <button onClick={handleAddToCart} disabled={!isInStock} className={`px-4 py-3 rounded-lg font-semibold ${isInStock ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>Add to Cart</button>
+              <button onClick={handleBuyNow} disabled={!isInStock} className={`px-4 py-3 rounded-lg font-semibold ${isInStock ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
                 <Wallet className="w-5 h-5 inline mr-2"/>Buy Now
               </button>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-gray-900 rounded-xl p-5 shadow space-y-3">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow dark:shadow-lg space-y-3">
             <div className="flex items-center justify-between">
-              <div className="font-semibold">Flexible EMI</div>
-              <div className="text-sm text-gray-500">Monthly EMI estimate</div>
+              <div className="font-semibold text-gray-900 dark:text-white">Flexible EMI</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Monthly EMI estimate</div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Tenure (months)</label>
-                <select value={tenure} onChange={(e)=> setTenure(Number(e.target.value))} className="w-full px-3 py-2 border rounded-lg">
+                <label className="block text-xs text-gray-700 dark:text-gray-300 mb-1">Tenure (months)</label>
+                <select value={tenure} onChange={(e)=> setTenure(Number(e.target.value))} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                   {[3,6,9,12,18,24].map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Monthly Rate</label>
-                <select value={monthlyRate} onChange={(e)=> setMonthlyRate(Number(e.target.value))} className="w-full px-3 py-2 border rounded-lg">
+                <label className="block text-xs text-gray-700 dark:text-gray-300 mb-1">Monthly Rate</label>
+                <select value={monthlyRate} onChange={(e)=> setMonthlyRate(Number(e.target.value))} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                   <option value={0.02}>2% / mo</option>
                   <option value={0.025}>2.5% / mo</option>
                   <option value={0.03}>3% / mo</option>
@@ -198,14 +198,14 @@ export default function ProductDetailPage() {
                 </select>
               </div>
             </div>
-            <div className="mt-1 text-lg font-bold">EMI: ₹{emi.toLocaleString('en-IN')}</div>
+            <div className="mt-1 text-lg font-bold text-gray-900 dark:text-white">EMI: ₹{emi.toLocaleString('en-IN')}</div>
           </div>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-900 rounded-xl p-5 shadow">
-        <h3 className="font-semibold mb-2">About</h3>
-        <p className="text-gray-600 dark:text-gray-300 text-sm">{row.description || 'No description provided.'}</p>
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow dark:shadow-lg">
+        <h3 className="font-semibold mb-2 text-gray-900 dark:text-white">About</h3>
+        <p className="text-gray-700 dark:text-gray-300 text-sm">{row.description || 'No description provided.'}</p>
       </div>
     </div>
   );

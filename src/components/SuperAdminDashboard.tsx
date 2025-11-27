@@ -226,36 +226,63 @@ export default function SuperAdminDashboard() {
     setProductLoanLoading(true);
     setProductLoanError(null);
     try {
-      const { data, error } = await supabase
-        .from('product_loans')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // STEP 1: Get all NBFC tie-ups to identify tied merchants
+      const { data: tieupData, error: tieupError } = await supabase
+        .from('nbfc_tieups')
+        .select('merchant_id');
 
-      if (error) throw error;
+      if (tieupError) throw tieupError;
 
-      const rows = (data || []) as any[];
-      const normalized: ProductLoanRow[] = rows.map((row) => ({
-        id: row.id,
-        application_number: row.application_number ?? null,
-        first_name: row.first_name ?? null,
-        last_name: row.last_name ?? null,
-        status: row.status ?? null,
-        created_at: row.created_at,
-        loan_amount: row.loan_amount ?? null,
-        total_amount: row.total_amount ?? null,
-        product_name: row.product_name ?? null,
-      }));
+      // Extract unique merchant IDs that have NBFC tie-ups
+      const tiedMerchantIds = Array.from(
+        new Set((tieupData || []).map((t: any) => t.merchant_id))
+      );
 
-      setProductLoanRows(normalized);
+      // STEP 2: Fetch product loans ONLY for tied merchants
+      if (tiedMerchantIds.length === 0) {
+        // No tied merchants, show empty list
+        setProductLoanRows([]);
+        setProductLoanStats({
+          total: 0,
+          pending: 0,
+          accepted: 0,
+          verified: 0,
+          disbursed: 0,
+          rejected: 0,
+        });
+      } else {
+        const { data, error } = await supabase
+          .from('product_loans')
+          .select('*')
+          .in('merchant_id', tiedMerchantIds)
+          .order('created_at', { ascending: false });
 
-      const total = normalized.length;
-      const pending = normalized.filter((r) => r.status === 'Pending').length;
-      const accepted = normalized.filter((r) => r.status === 'Accepted').length;
-      const verified = normalized.filter((r) => r.status === 'Verified').length;
-      const disbursed = normalized.filter((r) => r.status === 'Loan Disbursed').length;
-      const rejected = normalized.filter((r) => r.status === 'Rejected').length;
+        if (error) throw error;
 
-      setProductLoanStats({ total, pending, accepted, verified, disbursed, rejected });
+        const rows = (data || []) as any[];
+        const normalized: ProductLoanRow[] = rows.map((row) => ({
+          id: row.id,
+          application_number: row.application_number ?? null,
+          first_name: row.first_name ?? null,
+          last_name: row.last_name ?? null,
+          status: row.status ?? null,
+          created_at: row.created_at,
+          loan_amount: row.loan_amount ?? null,
+          total_amount: row.total_amount ?? null,
+          product_name: row.product_name ?? null,
+        }));
+
+        setProductLoanRows(normalized);
+
+        const total = normalized.length;
+        const pending = normalized.filter((r) => r.status === 'Pending').length;
+        const accepted = normalized.filter((r) => r.status === 'Accepted').length;
+        const verified = normalized.filter((r) => r.status === 'Verified').length;
+        const disbursed = normalized.filter((r) => r.status === 'Loan Disbursed').length;
+        const rejected = normalized.filter((r) => r.status === 'Rejected').length;
+
+        setProductLoanStats({ total, pending, accepted, verified, disbursed, rejected });
+      }
     } catch (e) {
       console.error('Failed to load product loan stats', e);
       setProductLoanError((e as any)?.message || 'Failed to load product loan details');

@@ -3,7 +3,7 @@ import { X, FileText, Download } from 'lucide-react';
 import { LoanDocument, supabase } from '../lib/supabase';
 
 interface DocsModalProps {
-  loanId: string;
+  loanId: string;  // Required: loan_id to fetch documents
   fullName: string; // for filename
   onClose: () => void;
   loanType?: 'general' | 'product';
@@ -19,20 +19,37 @@ export default function DocsModal({ loanId, fullName, onClose, loanType = 'gener
     (async () => {
       try {
         setError(null);
+        
+        if (!loanId) {
+          setError('No loan ID provided');
+          setLoading(false);
+          return;
+        }
+        
+        console.log(`Starting document fetch with loan_id: ${loanId}, loanType: ${loanType}`);
+        
+        // Build query - filter by loan_id
         let query = supabase
           .from('loan_documents')
           .select('*')
-          .eq('loan_id', loanId)
-          .order('uploaded_at', { ascending: true });
+          .eq('loan_id', loanId);
 
-        // For product loans, also include legacy rows where loan_type is NULL
+        console.log(`Built query filtering by loan_id: ${loanId}`);
+
+        // Filter by loan_type if specified
         if (loanType === 'product') {
-          query = query.or('loan_type.is.null,loan_type.eq.product');
-        } else {
-          query = query.eq('loan_type', loanType);
+          query = query.or('loan_type.eq.product,loan_type.is.null');
+          console.log('Added product loan type filter (product OR NULL)');
+        } else if (loanType === 'general') {
+          query = query.eq('loan_type', 'general');
+          console.log('Added general loan type filter');
         }
 
+        query = query.order('uploaded_at', { ascending: true });
+        console.log('Added ordering by uploaded_at');
+        
         const { data, error: queryError } = await query;
+        
         if (queryError) {
           console.error('Document fetch error:', {
             message: queryError.message,
@@ -45,14 +62,41 @@ export default function DocsModal({ loanId, fullName, onClose, loanType = 'gener
           throw queryError;
         }
 
+        console.log('Documents fetched successfully:', {
+          count: data?.length || 0,
+          loanId,
+          loanType,
+          documents: data?.map(d => ({ id: d.id, type: d.document_type, name: d.file_name }))
+        });
+
         let result = data || [];
+        
+        // If no documents found, debug
+        if (!result || result.length === 0) {
+          console.warn(`No documents found for loan_id: ${loanId}`);
+          
+          // Check if any documents exist for this loan
+          const { data: debugData } = await supabase
+            .from('loan_documents')
+            .select('*')
+            .eq('loan_id', loanId);
+          
+          if (debugData && debugData.length > 0) {
+            console.log(`Found ${debugData.length} total documents for this loan:`, debugData);
+            console.log('Loan types:', debugData.map(d => ({ doc_type: d.document_type, loan_type: d.loan_type })));
+          } else {
+            console.log(`No documents at all for loan_id: ${loanId}`);
+          }
+        }
+        
         if (onlyAdditional) {
           if (loanType === 'general') {
             const additionalSet = new Set<string>(['Appraisal Slip', 'Income Proof', 'Address Proof', 'Utility Bill']);
             result = result.filter(d => additionalSet.has(d.document_type));
           }
-          // For product loans, consider all fetched docs as additional
         }
+        
+        console.log('Setting docs state with', result.length, 'documents');
         setDocs(result);
       } catch (e: any) {
         console.error('Failed to load docs', e);
@@ -230,10 +274,14 @@ export default function DocsModal({ loanId, fullName, onClose, loanType = 'gener
           ) : error ? (
             <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
               <p className="text-sm text-red-700 dark:text-red-300">⚠️ Error loading documents: {error}</p>
-              <p className="text-xs text-red-600 dark:text-red-400 mt-1">Check browser console for details</p>
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1">Check browser console for details (F12)</p>
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1">Loan ID: {loanId}</p>
             </div>
           ) : docs.length === 0 ? (
-            <p className="text-sm text-gray-600 dark:text-gray-300">No documents uploaded.</p>
+            <div className="text-center py-6">
+              <p className="text-sm text-gray-600 dark:text-gray-300">No documents uploaded yet.</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Documents will appear here once you upload them with your loan application.</p>
+            </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {docs.map((d) => (

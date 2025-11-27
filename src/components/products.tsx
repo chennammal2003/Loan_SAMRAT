@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { Plus, X, Pencil, Trash2, Eye, Gem, Weight, Package, TrendingDown, Box } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { fetchMetalRates, type MetalRates } from '../lib/metals';
 
 interface ProductFormData {
   name: string;
@@ -138,6 +137,7 @@ type ProductsSubTab = 'list' | 'stock' | 'variantStock';
 
 export default function Product() {
   const { user } = useAuth();
+  const formRef = useRef<HTMLFormElement>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [products, setProducts] = useState<ProductRecord[]>([]);
@@ -160,8 +160,6 @@ export default function Product() {
   const [filterGemstone, setFilterGemstone] = useState('');
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
-  const [rates, setRates] = useState<MetalRates | null>(null);
-  const [ratesError, setRatesError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
   // NBFC terms (from tie-up) to prefill interest and tenure
   const [nbfcTerms, setNbfcTerms] = useState<{ interest_rate?: number | null; default_tenure?: number | null; processing_fee?: number | null; approval_type?: string | null; tenure_options?: number[] | null } | null>(null);
@@ -509,6 +507,7 @@ export default function Product() {
 
   const handleEditOpen = (p: ProductRecord) => {
     setEditingProduct(p);
+    setCurrentStep(0); // Reset to first step when editing
     setFormData({
       name: p.name,
       description: p.description ?? '',
@@ -606,6 +605,15 @@ export default function Product() {
     return () => { cancelled = true; };
   }, [viewingProduct?.id]);
 
+  // Auto-scroll form to top when step changes
+  useEffect(() => {
+    if (formRef.current) {
+      setTimeout(() => {
+        formRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 0);
+    }
+  }, [currentStep]);
+
   const handleDelete = async (p: ProductRecord) => {
     setDeleteTarget(p);
   };
@@ -654,10 +662,47 @@ export default function Product() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+    console.log('handleSubmit called, currentStep:', currentStep);
+    
     if (!user) {
       setError('You must be signed in to add products.');
       return;
     }
+    
+    // Only allow submit on pricing step
+    if (currentStep !== 3) {
+      console.log('Submit blocked - not on pricing step');
+      setError('Please go to the Pricing page to save the product');
+      return;
+    }
+    
+    // REQUIRED: Image and Final Price are mandatory
+    if (!formData.image && !formData.imageUrl) {
+      setError('Product image is required - please upload or provide image URL');
+      return;
+    }
+    
+    if (!formData.price || formData.price === '') {
+      setError('Final price is required - please enter the product price');
+      return;
+    }
+    
+    const priceNum = Number(formData.price);
+    if (isNaN(priceNum) || priceNum <= 0) {
+      setError('Price must be a valid positive number');
+      return;
+    }
+    
+    // Optional: Stock quantity validation if provided
+    if (formData.stockQty && formData.stockQty !== '') {
+      const stockNum = Number(formData.stockQty);
+      if (isNaN(stockNum) || stockNum < 0) {
+        setError('Stock quantity must be a valid non-negative number');
+        return;
+      }
+    }
+    
     setError(null);
     setSubmitting(true);
 
@@ -667,6 +712,7 @@ export default function Product() {
       const discountNumber = formData.discountPercent ? Number(formData.discountPercent) : null;
       const stockQtyNumber = formData.stockQty ? Number(formData.stockQty) : null;
       const shippingNumber = formData.shippingCharge ? Number(formData.shippingCharge) : null;
+      const makingChargeNumber = formData.makingCharge ? Number(formData.makingCharge) : null;
       const netWeightNumber = formData.netWeight ? Number(formData.netWeight) : null;
       const stoneWeightNumber = formData.stoneWeight ? Number(formData.stoneWeight) : null;
       const wastageWeightNumber = formData.wastageWeight ? Number(formData.wastageWeight) : null;
@@ -754,6 +800,7 @@ export default function Product() {
           sku: formData.sku || null,
           tags: formData.tags || null,
           shipping_charge: shippingNumber,
+          making_charge: makingChargeNumber,
           making_time: formData.makingTime || null,
           delivery_time: formData.deliveryTime || null,
           hallmark_cert_number: formData.hallmarkCertNumber || null,
@@ -782,15 +829,14 @@ export default function Product() {
           product_video_url: product_video_url,
           care_instructions: formData.careInstructions || null,
           availability: formData.availability || null,
-          seo_title: formData.seoTitle || null,
-          seo_description: formData.seoDescription || null,
-          seo_keywords: formData.seoKeywords || null,
-          slug: formData.slug || null,
         };
-        const chosenInterest = productFinance.interest_rate || (nbfcTerms?.interest_rate != null ? String(nbfcTerms.interest_rate) : '');
-        const chosenTenure = productFinance.tenure || (nbfcTerms?.default_tenure != null ? String(nbfcTerms.default_tenure) : '');
-        if (chosenInterest) (updatePayload as any).interest_rate = Number(chosenInterest);
-        if (chosenTenure) (updatePayload as any).tenure_months = Number(chosenTenure);
+        // Only save interest rate and tenure if merchant has an NBFC tie-up with valid terms
+        if (nbfcTerms?.interest_rate != null && nbfcTerms.interest_rate > 0) {
+          (updatePayload as any).interest_rate = Number(nbfcTerms.interest_rate);
+        }
+        if (nbfcTerms?.default_tenure != null && nbfcTerms.default_tenure > 0) {
+          (updatePayload as any).tenure_months = Number(nbfcTerms.default_tenure);
+        }
 
         let updError: any = null; let updData: any = null;
         try {
@@ -808,12 +854,6 @@ export default function Product() {
         if (updError) {
           delete (updatePayload as any).thumbnail_path;
           delete (updatePayload as any).thumbnail_url;
-          delete (updatePayload as any).interest_rate;
-          delete (updatePayload as any).tenure_months;
-          delete (updatePayload as any).seo_title;
-          delete (updatePayload as any).seo_description;
-          delete (updatePayload as any).seo_keywords;
-          delete (updatePayload as any).slug;
           const r2 = await supabase
             .from('products')
             .update(updatePayload)
@@ -896,6 +936,7 @@ export default function Product() {
           sku: formData.sku || null,
           tags: formData.tags || null,
           shipping_charge: shippingNumber,
+          making_charge: makingChargeNumber,
           making_time: formData.makingTime || null,
           delivery_time: formData.deliveryTime || null,
           hallmark_cert_number: formData.hallmarkCertNumber || null,
@@ -924,15 +965,14 @@ export default function Product() {
           product_video_url: product_video_url,
           care_instructions: formData.careInstructions || null,
           availability: formData.availability || null,
-          seo_title: formData.seoTitle || null,
-          seo_description: formData.seoDescription || null,
-          seo_keywords: formData.seoKeywords || null,
-          slug: formData.slug || null,
         };
-        const insInterest = productFinance.interest_rate || (nbfcTerms?.interest_rate != null ? String(nbfcTerms.interest_rate) : '');
-        const insTenure = productFinance.tenure || (nbfcTerms?.default_tenure != null ? String(nbfcTerms.default_tenure) : '');
-        if (insInterest) (insertPayload as any).interest_rate = Number(insInterest);
-        if (insTenure) (insertPayload as any).tenure_months = Number(insTenure);
+        // Only save interest rate and tenure if merchant has an NBFC tie-up with valid terms
+        if (nbfcTerms?.interest_rate != null && nbfcTerms.interest_rate > 0) {
+          (insertPayload as any).interest_rate = Number(nbfcTerms.interest_rate);
+        }
+        if (nbfcTerms?.default_tenure != null && nbfcTerms.default_tenure > 0) {
+          (insertPayload as any).tenure_months = Number(nbfcTerms.default_tenure);
+        }
 
         let insErr: any = null; let insData: any = null;
         try {
@@ -948,12 +988,6 @@ export default function Product() {
         if (insErr) {
           delete (insertPayload as any).thumbnail_path;
           delete (insertPayload as any).thumbnail_url;
-          delete (insertPayload as any).interest_rate;
-          delete (insertPayload as any).tenure_months;
-          delete (insertPayload as any).seo_title;
-          delete (insertPayload as any).seo_description;
-          delete (insertPayload as any).seo_keywords;
-          delete (insertPayload as any).slug;
           const r2 = await supabase
             .from('products')
             .insert(insertPayload)
@@ -1662,18 +1696,19 @@ export default function Product() {
               </ol>
             </div>
 
-             <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[70vh]">
-              {(() => {
-                if (rates === null && !ratesError) {
-                  const ctrl = new AbortController();
-                  fetchMetalRates(ctrl.signal)
-                    .then((d) => setRates(d))
-                    .catch((e) => setRatesError(e?.message || 'Failed to load metal rates'));
-                }
-                return null;
-              })()}
-              {ratesError && (
-                <div className="mb-3 text-sm text-red-600 dark:text-red-400">{ratesError}</div>
+             <form ref={formRef} onSubmit={(e) => {
+               e.preventDefault();
+               e.stopPropagation();
+               // ONLY submit if on the pricing/final step AND submit button was explicitly clicked
+               if (currentStep !== 3) {
+                 // Never submit on any other step
+                 console.log('Form submit prevented - not on pricing step');
+                 return false;
+               }
+               handleSubmit(e);
+             }} className="p-6 overflow-y-auto max-h-[70vh]" noValidate>
+              {error && (
+                <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3 rounded-lg animate-slide-up">{error}</div>
               )}
 
               {currentStep === 0 && (
@@ -1685,7 +1720,6 @@ export default function Product() {
                       name="category"
                       value={formData.category}
                       onChange={handleInputChange}
-                      required
                       className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
                     >
                       <option value="" disabled>Select category</option>
@@ -1706,7 +1740,6 @@ export default function Product() {
                       name="metalType"
                       value={formData.metalType}
                       onChange={handleInputChange}
-                      required
                       className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
                     >
                       <option value="" disabled>Select metal</option>
@@ -1728,7 +1761,6 @@ export default function Product() {
                       name="name"
                       value={formData.name}
                       onChange={handleInputChange}
-                      required
                       className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
                       placeholder="Enter product name"
                     />
@@ -1758,7 +1790,6 @@ export default function Product() {
                         name="purity"
                         value={formData.purity}
                         onChange={handleInputChange}
-                        required
                         disabled={!formData.metalType}
                         className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all disabled:opacity-60"
                       >
@@ -1776,7 +1807,6 @@ export default function Product() {
                         name="weight"
                         value={formData.weight}
                         onChange={handleInputChange}
-                        required
                         step="0.01"
                         min="0"
                         className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
@@ -2111,7 +2141,6 @@ export default function Product() {
                       name="price"
                       value={formData.price}
                       onChange={handleInputChange}
-                      required
                       step="0.01"
                       min="0"
                       className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
@@ -2120,48 +2149,9 @@ export default function Product() {
                   </div>
                 </div>
                 {(() => {
-                  const weight = parseFloat(formData.weight || '0');
-                  const making = parseFloat(formData.makingCharge || '0');
-                  const metal = formData.metalType;
-                  const purity = formData.purity;
-                  let perGram = 0;
-                  if (rates) {
-                    if (metal === 'Gold') {
-                      const karat = purity.endsWith('K') ? parseInt(purity) : 24;
-                      const base24 = rates.perGram.gold24k;
-                      perGram = base24 * (karat / 24);
-                    } else if (metal === 'Silver') {
-                      perGram = rates.perGram.silver;
-                    }
-                  }
-                  const suggested = perGram > 0 && weight > 0 ? perGram * weight + making : null;
                   return (
-                    <div className="rounded-xl border border-slate-200 dark:border-gray-700 p-3 text-sm flex items-center justify-between">
-                      <div className="text-slate-600 dark:text-gray-300">
-                        {rates ? (
-                          suggested != null ? (
-                            <span>Suggested price from live rate: <b>₹{Math.round(suggested).toLocaleString('en-IN')}</b></span>
-                          ) : (
-                            <span>Enter metal, purity, and weight to see suggested price</span>
-                          )
-                        ) : (
-                          <span>Fetching live metal rates…</span>
-                        )}
-                      </div>
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (suggested != null) {
-                              setFormData((prev) => ({ ...prev, price: String(Math.round(suggested)) }));
-                            }
-                          }}
-                          className="px-3 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-60"
-                          disabled={suggested == null}
-                        >
-                          Use live price
-                        </button>
-                      </div>
+                    <div className="rounded-xl border border-slate-200 dark:border-gray-700 p-3 text-sm text-slate-600 dark:text-gray-300">
+                      💡 Enter the final product price. You can set discounts separately.
                     </div>
                   );
                 })()}
@@ -2192,7 +2182,6 @@ export default function Product() {
                       onChange={handleInputChange}
                       min="0"
                       step="1"
-                      required
                       className="w-full px-4 py-2.5 border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-slate-900 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
                       placeholder="e.g., 10"
                     />
@@ -2235,7 +2224,45 @@ export default function Product() {
                 {currentStep < 3 ? (
                   <button
                     type="button"
-                    onClick={() => setCurrentStep((s) => Math.min(3, s + 1))}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      
+                      // When editing, allow quick navigation to pricing without validation
+                      if (editingProduct) {
+                        setCurrentStep((s) => Math.min(3, s + 1));
+                        return;
+                      }
+                      
+                      // For new products, show optional warnings but still allow to proceed
+                      let errorMsg = '';
+                      
+                      if (currentStep === 0) {
+                        // Step 0: Product Type - optional, allow to proceed
+                        if (!formData.category || !formData.metalType) {
+                          errorMsg = 'Please select category and metal type for better product organization';
+                        }
+                      } else if (currentStep === 1) {
+                        // Step 1: Details - optional, allow to proceed
+                        if (!formData.name || formData.name.trim() === '') {
+                          errorMsg = 'Product name is helpful for identification';
+                        }
+                      } else if (currentStep === 2) {
+                        // Step 2: Specification - optional, allow to proceed
+                        if (!formData.image && !formData.imageUrl) {
+                          errorMsg = 'Image will be required at final submit';
+                        }
+                      }
+                      
+                      if (errorMsg) {
+                        setError(errorMsg);
+                        setTimeout(() => setError(null), 2000);
+                      } else {
+                        setError(null);
+                      }
+                      
+                      setCurrentStep((s) => Math.min(3, s + 1));
+                    }}
                     className="ml-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-all duration-300 shadow-lg hover:shadow-xl"
                   >
                     Next
@@ -2243,8 +2270,9 @@ export default function Product() {
                 ) : (
                   <button
                     type="submit"
-                    disabled={submitting}
+                    disabled={submitting || !formData.price || (!editingProduct && !formData.image && !formData.imageUrl)}
                     className="ml-auto px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-all duration-300 shadow-lg hover:shadow-xl"
+                    title={!formData.price ? 'Please enter Final Price' : (!editingProduct && !formData.image && !formData.imageUrl ? 'Please upload Product Image' : '')}
                   >
                     {submitting ? 'Saving...' : (editingProduct ? 'Save Changes' : 'Add Product')}
                   </button>

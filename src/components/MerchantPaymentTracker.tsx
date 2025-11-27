@@ -12,6 +12,8 @@ interface LoanRow {
   tenure: number;
   interestScheme: string;
   disbursedDate: string;
+  productDeliveredDate?: string;
+  productDeliveryStatus?: string;
   emiAmount: number;
   totalPayable: number;
   paidAmount: number;
@@ -240,12 +242,14 @@ export default function MerchantPaymentTracker() {
       setLoading(true);
       setError(null);
       try {
+        // Fetch from product_loans table instead of loans table
+        // This ensures we get product loan records with all product details
         const { data, error } = await supabase
-          .from('loans')
+          .from('product_loans')
           .select('*')
-          .eq('status', 'Loan Disbursed')
-          .eq('user_id', profile.id)
-          .order('disbursed_at', { ascending: false });
+          .eq('merchant_id', profile.id)
+          .in('status', ['Verified', 'Accepted', 'Loan Disbursed', 'Delivered'])
+          .order('created_at', { ascending: false });
         if (error) throw error;
         const loanRows = data || [];
         // try to fetch latest disbursement_date for these loans to drive schedule
@@ -273,22 +277,39 @@ export default function MerchantPaymentTracker() {
         let emiStatuses: Record<string, string[]> = {};
         if (loanRows.length > 0) {
           const ids = loanRows.map((l: any) => l.id);
+          // Try product_emi_statuses first (NEW table with product loan tracking)
           const { data: emi, error: eErr } = await supabase
-            .from('emi_statuses')
-            .select('loan_id, installment_index, status')
-            .in('loan_id', ids);
-          if (!eErr && emi) {
+            .from('product_emi_statuses')
+            .select('product_loan_id, installment_index, status')
+            .in('product_loan_id', ids);
+          
+          if (!eErr && emi && emi.length > 0) {
+            // Use new product_emi_statuses table
             const map: Record<string, string[]> = {};
             for (const row of emi as any[]) {
-              if (!map[row.loan_id]) map[row.loan_id] = [];
-              map[row.loan_id][row.installment_index] = row.status;
+              if (!map[row.product_loan_id]) map[row.product_loan_id] = [];
+              map[row.product_loan_id][row.installment_index] = row.status;
             }
             emiStatuses = map;
+          } else {
+            // Fallback to legacy emi_statuses table
+            const { data: emiOld, error: eErrOld } = await supabase
+              .from('emi_statuses')
+              .select('loan_id, installment_index, status')
+              .in('loan_id', ids);
+            if (!eErrOld && emiOld) {
+              const map: Record<string, string[]> = {};
+              for (const row of emiOld as any[]) {
+                if (!map[row.loan_id]) map[row.loan_id] = [];
+                map[row.loan_id][row.installment_index] = row.status;
+              }
+              emiStatuses = map;
+            }
           }
         }
         const rows = loanRows.map((l: any) => {
           const fullName = `${l.first_name ?? ''} ${l.last_name ?? ''}`.trim();
-          const loanAmount = Number(l.amount_disbursed ?? l.loan_amount ?? 0);
+          const loanAmount = Number(l.loan_amount ?? 0);
           const tenure = Number(l.tenure ?? 0);
           // EMI at 36% p.a. => 3% per month
           const r = 0.36 / 12;
@@ -338,12 +359,14 @@ export default function MerchantPaymentTracker() {
 
           return {
             id: l.id,
-            applicationNumber: l.application_number,
+            applicationNumber: l.application_number || String(l.id),
             fullName,
             loanAmount,
             tenure,
             interestScheme: String(l.interest_scheme ?? ''),
-            disbursedDate: byId[l.id] ?? l.disbursement_date ?? l.disbursed_at ?? l.created_at,
+            disbursedDate: byId[l.id] ?? l.gold_price_lock_date ?? l.created_at,
+            productDeliveredDate: l.product_delivered_date,
+            productDeliveryStatus: l.product_delivery_status,
             emiAmount,
             totalPayable,
             paidAmount,
@@ -619,7 +642,9 @@ export default function MerchantPaymentTracker() {
             loanAmount: selectedLoan.loanAmount,
             tenure: selectedLoan.tenure,
             emiAmount: selectedLoan.emiAmount,
-            disbursedDate: selectedLoan.disbursedDate
+            disbursedDate: selectedLoan.disbursedDate,
+            productDeliveredDate: selectedLoan.productDeliveredDate,
+            productDeliveryStatus: selectedLoan.productDeliveryStatus
           }}
           onClose={() => setSelectedLoan(null)}
           readOnly={true}
